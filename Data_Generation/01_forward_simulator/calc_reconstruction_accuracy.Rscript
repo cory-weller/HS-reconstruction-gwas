@@ -1,0 +1,247 @@
+#!/usr/bin/env Rscript
+
+library(data.table)
+library(foreach)
+
+
+calc_accuracy <- function(zipFile, individual_iteration, accuracy_by_chance.DT) {
+    estimate.vcf.filename <- paste(individual_iteration, ".estimate.vcf", sep="")
+    true.vcf.filename <- paste(individual_iteration, ".vcf", sep="")
+
+    # Unzip / read in genotypes
+    estimate.vcf <- fread(paste("unzip -p", zipFile, estimate.vcf.filename, sep=" "), header=FALSE, na.strings="./.", showProgress=FALSE, col.names=c("CHR","POS","e1","e2"), key=c("CHR","POS"))
+    true.vcf <- fread(paste("unzip -p", zipFile, true.vcf.filename, sep=" "), header=TRUE, na.strings="./.", showProgress=FALSE, col.names=c("a1","a2"))
+    sites.vcf <- fread(paste("unzip -p", zipFile, "sites.vcf", sep=" "), header=TRUE, na.strings="./.", showProgress=FALSE, col.names=c("CHR","POS"), key=c("CHR","POS"))
+
+    # combine true chromosome/site columns with true genotype columns
+    true.vcf <- cbind(sites.vcf, true.vcf)
+
+    # combine truth with estimate
+    DT <- merge(true.vcf, estimate.vcf)
+
+    # Remove rows without diploid estimate or true genotype
+    DT <- DT[!is.na(a1) & ! is.na(a2) & ! is.na(e1) & ! is.na(e2)]
+
+    # If genotypes are 0/0 and 1/1 (i.e. from DGRP simulations), convert to 0 and 1
+    if(any(DT=="0/0") | any(DT=="1/1")) {
+        # Convert genotypes to factors
+        DT[, c("a1","a2","e1","e2") := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=c("a1","a2","e1","e2")]
+        # Convert factos to numeric (0/0 -> 1, 1/1 -> 2)
+        DT[, c("a1","a2","e1","e2") := lapply(.SD, as.numeric), .SDcols=c("a1","a2","e1","e2")]
+        # Subtract 1; ref/ref is now 0, alt/alt is 1
+        DT[, c("a1","a2","e1","e2") := lapply(.SD, "-", 1), .SDcols=c("a1","a2","e1","e2")]
+    }
+
+    # calculate alt dosage by summing both "actual" alleles, and summing both "estimate" alleles
+    # "actual" and "estimate" columns will take on values of either (0, 1, 2) where 0=ref/ref, 1=heterozygote, 2=alt/alt
+    DT[, actual := a1 + a2]
+    DT[, estimate := e1 + e2]
+    # Merge in accuracy by chance at variable sites used
+    DT[accuracy_by_chance.DT, byChance := i.byChance, on=c(CHR="CHROM", POS="POS")][]
+
+    # Iterate through chromosomes, calculating  the fraction of sites where actual == estimate
+    DT.out <- foreach(chr.i = unique(DT[,CHR]), .combine="rbind") %do% {
+        nSites <- dim(DT[.(chr.i)])[1]
+        nMatches <- dim(DT[.(chr.i)][actual==estimate])[1]
+        percentMatches <- nMatches/nSites
+        accByChance <- mean(DT[.(chr.i), byChance], na.rm=T)
+        return(data.table("CHR"=chr.i, nSites, nMatches, percentMatches, accByChance))
+    }
+
+    DT.out[, "individual_iteration" := individual_iteration ]
+
+    # write output
+    #setcolorder(DT.out, c("ind_id", "nFounders", "nGenerations", "CHR", "nSites", "nMatches", "percentMatches"))
+    return(DT.out)
+}
+
+# calc_scrm_accuracy <- function(coverage, mu, Ne, nFounders, population_iteration, individual_iteration, population="scrm", nGenerations="5", chromosomeSize="25e6") {
+#     zipFile <- paste(population, "_", mu, "_", Ne, "_", nFounders, "_", nGenerations, "_", chromosomeSize, "_", population_iteration, ".zip", sep="")
+#     estimate.vcf.filename <- paste(individual_iteration, ".estimate.vcf", sep="")
+#     true.vcf.filename <- paste(individual_iteration, ".vcf", sep="")
+#
+#     # Unzip / read in genotypes
+#     estimate.vcf <- fread(paste("unzip -p", zipFile, estimate.vcf.filename, sep=" "), header=FALSE, na.strings="./.", showProgress=FALSE, col.names=c("CHR","POS","e1","e2"), key=c("CHR","POS"))
+#     true.vcf <- fread(paste("unzip -p", zipFile, true.vcf.filename, sep=" "), header=TRUE, na.strings="./.", showProgress=FALSE, col.names=c("a1","a2"))
+#     sites.vcf <- fread(paste("unzip -p", zipFile, "sites.vcf", sep=" "), header=TRUE, na.strings="./.", showProgress=FALSE, col.names=c("CHR","POS"), key=c("CHR","POS"))
+#
+#     # combine true chromosome/site columns with true genotype columns
+#     true.vcf <- cbind(sites.vcf, true.vcf)
+#
+#     # combine truth with estimate
+#     DT <- merge(true.vcf, estimate.vcf)
+#
+#     DT <- DT[!is.na(a1) & ! is.na(a2) & ! is.na(e1) & ! is.na(e2)]
+#
+#     # If genotypes are 0/0 and 1/1 (i.e. from DGRP simulations), convert to 0 and 1
+#     if(any(DT=="0/0") | any(DT=="1/1")) {
+#         # Convert genotypes to factors
+#         DT[, c("a1","a2","e1","e2") := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=c("a1","a2","e1","e2")]
+#         # Convert factos to numeric (0/0 -> 1, 1/1 -> 2)
+#         DT[, c("a1","a2","e1","e2") := lapply(.SD, as.numeric), .SDcols=c("a1","a2","e1","e2")]
+#         # Subtract 1; ref/ref is now 0, alt/alt is 1
+#         DT[, c("a1","a2","e1","e2") := lapply(.SD, "-", 1), .SDcols=c("a1","a2","e1","e2")]
+#     }
+#
+#     # calculate alt dosage by summing both "actual" alleles, and summing both "estimate" alleles
+#     # "actual" and "estimate" columns will take on values of either (0, 1, 2) where 0=ref/ref, 1=heterozygote, 2=alt/alt
+#     DT[, actual := a1 + a2]
+#     DT[, estimate := e1 + e2]
+#
+#
+#     # Iterate through chromosomes, calculating  the fraction of sites where actual == estimate
+#     DT.out <- foreach(chr.i = unique(DT[,CHR]), .combine="rbind") %do% {
+#         nSites <- dim(DT[.(chr.i)])[1]
+#         nMatches <- dim(DT[.(chr.i)][actual==estimate])[1]
+#         percentMatches <- nMatches/nSites
+#         accByChance <- mean(DT[.(chr.i), byChance], na.rm=T)
+#
+#         return(data.table("CHR"=chr.i, nSites, nMatches, percentMatches))
+#     }
+#
+#
+#     # write output
+#     return(DT.out)
+# }
+
+read_founder_haplotypes <- function(zipFile) {
+    population <- unlist(strsplit(zipFile, "_"))[1]
+    if(population=="scrm") {
+        vcf <- fread(paste("unzip -p ", zipFile, " haplotypes.vcf", sep=""))
+    } else if(population=="dgrp") {
+        vcf <- fread("zcat dgrp.haplotypes.vcf.gz")
+    }
+    setnames(vcf, "#CHROM", "CHROM")
+}
+
+read_founders <- function(zipFile) {
+    fread(paste("unzip -p ", zipFile, " founders.txt", sep=""), header=F)$V1
+}
+
+calc_prob_by_chance <- function(p) {
+    return(max(p**2, 2*p*(1-p), (1-p)**2))
+}
+
+calc_freqs <- function(DT, founders) {
+    if (any(DT[1] %in% c("0/0", "1/1"))) {
+        ref <- "0/0"
+        alt <- "1/1"
+    } else if (any(DT[1] %in% c(0, 1))) {
+        ref <- 0
+        alt <- 1
+    }
+
+    DT[, sumRef := Reduce(`+`, lapply(.SD, function(x) x == ref )), .SDcols=founders]
+    DT[, sumAlt := Reduce(`+`, lapply(.SD, function(x) x == alt )), .SDcols=founders]
+    DT[, p := sumRef / (sumRef + sumAlt) ]
+    DT[, byChance := sapply(p, function(x) calc_prob_by_chance(x))]
+    DT.out <- DT[,c("CHROM","POS","p","byChance")]
+    DT[, c("sumRef","sumAlt","p","byChance") := NULL]
+    return(DT.out)
+}
+
+
+
+# Get vector of accuracy by chance; this will be unique for every set of founders
+# 1 job, 1 population  (1 zipfile)
+
+zipFile <- commandArgs(trailingOnly=TRUE)[1]
+
+split_filename <- strsplit(strsplit(zipFile, ".zip")[[1]], "_")[[1]]
+output_filename <- paste(strsplit(zipFile, ".zip")[[1]], ".tab", sep="")
+
+population <- split_filename[1]
+
+if(population == "dgrp") {
+    coverage <- split_filename[2]
+    nFounders <- split_filename[3]
+    population_iteration <- split_filename[4]
+    nGenerations <- "5"
+    mu <- NA
+    Ne <- NA
+} else {
+    coverage <- "0.05X"
+    mu  <- split_filename[2]
+    Ne <- split_filename[3]
+    nFounders <- split_filename[4]
+    nGenerations <- split_filename[5]
+    chromosomeSize <- split_filename[6]
+    population_iteration <- split_filename[7]
+}
+
+vcf <- read_founder_haplotypes(zipFile)
+founders <- read_founders(zipFile)
+
+accuracy_by_chance <- calc_freqs(vcf, founders)
+
+o <- foreach(individual_iteration=1:10, .combine="rbind") %do% {
+    calc_accuracy(zipFile, individual_iteration, accuracy_by_chance)
+}
+
+final.output <- cbind(o, coverage, nFounders, Ne, mu, population_iteration, population)
+
+write.table(final.output, file=output_filename, sep="\t", quote=F, row.names=F, col.names=T)
+
+#
+#
+#
+#
+#
+#
+#
+#
+# dgrp.iters <- CJ("coverage"=c("0.05", "0.005"), "nFounders"=c("32","128"), "population_iteration"=1:10, "individual_iteration"=1:10)
+# iteration <- 1
+# coverage <- dgrp.iters[iteration][[1]]
+# nFounders <- dgrp.iters[iteration][[2]]
+# population_iteration <- dgrp.iters[iteration][[3]]
+# individual_iteration <- dgrp.iters[iteration][[4]]
+#
+# zipFile <- paste("dgrp", "_", coverage, "X", "_", nFounders, "_", population_iteration, ".zip", sep="")
+#
+#
+# dgrp.dat <- calc_dgrp_accuracy(coverage, nFounders, population_iteration, individual_iteration)
+#
+#
+# dgrp.dat <- foreach(i=1:nrow(dgrp.iters), .combine="rbind", .errorhandling="remove") %do% {
+#     print(paste("dgrp ", i, " of ", nrow(dgrp.iters), sep=""))
+#     calc_dgrp_accuracy(dgrp.iters[i][[1]], dgrp.iters[i][[2]], dgrp.iters[i][[3]], dgrp.iters[i][[4]])
+# }
+#
+#
+#
+#
+#
+#
+# # merge probability by chance onto actual accuracy
+#
+# # merge by chance back into first table
+#
+# system.time(vcf[, sumRef := Reduce(`+`, lapply(.SD, function(x) x %in% c("0/0", 0) )), .SDcols=founders])
+#
+# system.time(vcf[, sumRef := Reduce(`+`, lapply(.SD, function(x) x == 0 )), .SDcols=founders])
+#
+# vcf[, sumAlt := Reduce(`+`, lapply(.SD, function(x) x %in% c("1/1", 1) )), .SDcols=founders]
+#
+#
+# read_dgrp_founder_haplotypes <- function(zipFile) {
+#     vcf <- fread("zcat dgrp.haplotypes.vcf.gz", skip="#CHROM", na.strings=c("./.", "."))
+#     setnames(vcf, "#CHROM", "CHROM")
+# }
+#
+#
+# dgrp.iters <- CJ("coverage"=c("0.05", "0.005"), "nFounders"=c("32","128"), "population_iteration"=1:10, "individual_iteration"=1:10)
+#
+# dgrp.dat <- foreach(i=1:nrow(dgrp.iters), .combine="rbind", .errorhandling="remove") %do% {
+#     print(paste("dgrp ", i, " of ", nrow(dgrp.iters), sep=""))
+#     calc_dgrp_accuracy(dgrp.iters[i][[1]], dgrp.iters[i][[2]], dgrp.iters[i][[3]], dgrp.iters[i][[4]])
+# }
+#
+# saveRDS(dgrp.dat, file="dgrp.accuracy.RDS",
+#
+# scrm.iters <- CJ("coverage"=c("0.05"), "mu"=c("1e-9", "5e-9", "1e-8"), "Ne"=c("1e4", "1e5","1e6"),"nFounders"=c("32","128"), "population_iteration"=1:10, "individual_iteration"=1:10)
+#
+# scrm.dat <- foreach(i=1:nrow(scrm.iters), .combine="rbind", .errorhandling="remove") %do% {
+#     print(paste("scrm ", i, " of ", nrow(scrm.iters), sep=""))
+#     calc_scrm_accuracy(scrm.iters[i][[1]], scrm.iters[i][[2]], scrm.iters[i][[3]], scrm.iters[i][[4]], scrm.iters[i][[5]], scrm.iters[i][[6]])
+# }

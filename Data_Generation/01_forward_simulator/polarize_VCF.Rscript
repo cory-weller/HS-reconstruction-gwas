@@ -1,0 +1,81 @@
+#!/usr/bin/env Rscript
+
+# argument 1 = infilename
+# argument 2 = outfilename
+
+# VCF file should already be curated to only include bi-allelic SNPs (no indels)
+# and no individuals should have heterozygous genotypes (fully inbred).
+
+library(data.table)
+
+importVCF <- function(filename) {
+	if (grepl(".gz$", "file.vcf.gz") == TRUE) {
+		readIn <- paste("zcat ", filename, sep="")
+	} else {
+		readIn <- filename
+	}
+	DT <- fread(readIn, na.strings=c(".","./.", "./1", "./0", "0/.", "1/.", "0/1", "1/0"), showProgress=FALSE, header=TRUE, skip="#CHROM")
+    setnames(DT, "#CHROM", "CHROM")
+    setkey(DT, CHROM)
+    polarizeVCF(DT)
+    return(DT)
+}
+
+polarizeVCF <- function(DT) {
+    # Polarizes a VCF data.table to -1 for alt and +1 for ref allele
+    # save column names of lineIDs for subset with .SD
+    cols <- colnames(DT)[10:ncol(DT)]
+
+    # If in "0/0" format instead of "0" format; convert "0/0" to "0" and "1/1" to "1"
+    if (any("1/1" == DT[,10:length(colnames(DT)), with=FALSE])) {
+        # convert to factor, then to numeric, such that "0/0" is now 1, "1/1" is now 3
+        DT[, (cols) := lapply(.SD, factor, levels=c("0/0","padding","1/1")), .SDcols=cols]
+        DT[, (cols) := lapply(.SD, as.numeric), .SDcols=cols]
+
+        # some arithmetic such that 1 stays 1, and 3 is now -1
+        DT[, (cols) := lapply(.SD, function(x) ((x*-1)+2)), .SDcols=cols]
+	} else if (any(2 == DT[,10:length(colnames(DT)), with=FALSE])) {
+		DT[, (cols) := lapply(.SD, function(x) ((x-1)*-1)), .SDcols=cols][]
+	} else if (any(1 == DT[,10:length(colnames(DT)), with=FALSE])) {
+        # some arithmetic such that 0 is now 1, and 1 is now -1
+		DT[, (cols) := lapply(.SD, function(x) ((x*-2)+1)), .SDcols=cols][]
+    }
+
+	    # convert any NA values to 0
+    for (j in cols) {
+        set(DT, which(is.na(DT[[j]])), j, 0)
+    }
+
+    # convert anything else to 0
+    for (j in cols) {
+        set(DT, which(! DT[[j]] %in% c(-1, 0, 1)), j, 0)
+    }
+
+    invisible(DT[])
+}
+
+
+# Parse arguments
+	args <- commandArgs(trailingOnly=TRUE)
+	infilename <- as.character(args[[1]])
+	outfilename <- as.character(args[[2]])
+
+# Load VCF file containing founder Haplotypes, and polarize VCF such that reference = 0; alt = -1; missing data = 0
+	vcf.DT <- importVCF(infilename)
+
+# Set ID and INFO columns to NA (unused for GWAS, for simplified memory usage)
+	vcf.DT[, ID := NA]
+	vcf.DT[, INFO := NA]
+
+# Test if user input included gz file extension; if not, add it
+	if(grepl(".gz$", filename) == FALSE) {
+		fileOut <- gzfile(outfilename, "w")
+	} else {
+		fileOut <- paste(outfilename, ".gz", sep="")
+	}
+
+# Write table to compressed gzfile
+	write.table(vcf.DT, fileOut, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
+
+# Close gz file connection
+	close(fileOut)

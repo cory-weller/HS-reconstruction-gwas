@@ -1,0 +1,68 @@
+#!/usr/bin/env Rscript
+
+library(data.table)
+library(foreach)
+
+
+setwd("/scratch/caw5cv/low-coverage-genome-reconstruction/data/reconstruction")
+
+filenames <- list.files(pattern="*\\.zip")
+
+getRecombinationStats <- function(filenames) {
+    dat.out <- foreach(zipFile = filenames, .combine="rbind") %do% {
+        print(zipFile)
+        split_filename <- strsplit(strsplit(zipFile, ".zip")[[1]], "_")[[1]]
+        output_filename <- paste(strsplit(zipFile, ".zip")[[1]], ".tab", sep="")
+
+        population <- split_filename[1]
+
+        if(population == "dgrp") {
+            coverage <- split_filename[2]
+            nFounders <- split_filename[3]
+            population_iteration <- split_filename[4]
+            nGenerations <- "5"
+            mu <- NA
+            Ne <- NA
+        } else {
+            coverage <- "0.05X"
+            mu  <- split_filename[2]
+            Ne <- split_filename[3]
+            nFounders <- split_filename[4]
+            nGenerations <- split_filename[5]
+            chromosomeSize <- split_filename[6]
+            population_iteration <- split_filename[7]
+        }
+
+
+        dat.true <- fread(paste("unzip -p ", zipFile, " population.haps", sep=""), header=TRUE)
+        dat.true[, pid := rleid(lineID), by=list(chromosome,haplotype, ind)]
+        dat.true.ag <- dat.true[, .(nRecombTrue=max(pid)-1), by=list(chromosome,haplotype,ind)]
+        setkey(dat.true.ag, ind, haplotype, chromosome)
+
+        dat.est.o <- foreach(individual_iteration=1:10, .combine="rbind") %do% {
+            dat.est <- fread(paste("unzip -p ", zipFile, " ", individual_iteration, ".estimate.haps", sep=""), header=TRUE)
+            dat.est1 <- dat.est[,c(1,2,3,4)]
+            dat.est1[,haplotype := 1]
+            setnames(dat.est1, "par1", "lineID")
+            dat.est2 <- dat.est[,c(1,2,3,5)]
+            dat.est2[, haplotype := 2]
+            setnames(dat.est2, "par2", "lineID")
+            dat.est.all <- rbindlist(list(dat.est1, dat.est2))
+            dat.est.all <- rbindlist(list(dat.est1, dat.est2))
+            dat.est.all[, pid := rleid(lineID), by=list(chromosome, haplotype)]
+            dat.est.ag <- dat.est.all[, .(nRecombEst=max(pid)-1), by=list(chromosome,haplotype)]
+            dat.est.ag[, "ind" := individual_iteration][]
+            return(dat.est.ag)
+        }
+        setkey(dat.est.o, ind, haplotype, chromosome)
+        dat.merge <- merge(dat.est.o, dat.true.ag)
+        return(cbind(dat.merge, population, coverage, nFounders, Ne, mu, population_iteration))
+    }
+    return(dat.out)
+
+}
+
+recombination.DT <- getRecombinationStats(filenames)
+
+
+write.table(recombination.DT, file="reconstruction_recombination_estimates.tab", quote=F, col.names=TRUE, row.names=FALSE, sep="\t")
