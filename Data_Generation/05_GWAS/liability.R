@@ -7,15 +7,19 @@ library(foreach)
 library(doMC)
 registerDoMC(cores=5)
 
-# args <- c("hybrid_swarm_128_F1", 1, 5, 0.2)
-# args <- c("hybrid_swarm_128_F2", 1, 1, 0.2)
-# args <- c("hybrid_swarm_128_F5", 1, 5, 0.2)
-# args <- c("hybrid_swarm_128_F5", 1, 1, 0.2)
 args <- commandArgs(trailingOnly=TRUE)
 population <- args[1]
 replicates <- as.numeric(args[2])
 n_loci_subset <- as.numeric(args[3])
 effect_size <- as.numeric(args[4])
+
+# Change to TRUE if it is desired to sample hybrid swarm haplotypes with replacement.
+# Ensure that at least N=5000 haplotypes are available for sampling, 
+# or reduce number of individuals sampled for the GWAS mapping population,
+# otherwise the simulation will fail.
+sampleWithReplacement <- FALSE
+mappingPopulationSize <- 5000
+
 
 nFoundersSplit <- unlist(strsplit(unlist(strsplit(population, split="_F"))[1], split="_"))
 nFounders <- as.numeric(nFoundersSplit[length(nFoundersSplit)])
@@ -70,7 +74,7 @@ if(inbred == FALSE) {
 
 if(RIL==TRUE) {
 # replicate draws   
-inds <- sample(unique(haps[,ind]), size=5000, replace=TRUE)
+inds <- sample(unique(haps[,ind]), size=mappingPopulationSize, replace=TRUE)
 }
 
 vcf <- load_VCF("2L")
@@ -116,21 +120,21 @@ setkey(permuted_haplotypes, ind)
   dosage_subset <- dosage_subset[, list("liability"=sum(effect*altDosage)), by=list(ind_n)]
   dosage_subset[, risk := liability(liability)]
   if(RIL==TRUE) {
-    chosen <- dosage_subset[sample(800, replace=T, size=5000)]
+    chosen <- dosage_subset[sample(800, replace=sampleWithReplacement, size=mappingPopulationSize)]
     chosen[, rnd := runif(.N, min=0, max=1)]
     chosen[, group := ifelse(rnd <= risk, "case", "control")]
   } else {
   # if not RIL with real PVE  
     dosage_subset[, rnd := runif(.N, min=0, max=1)]
     dosage_subset[, group := ifelse(rnd <= risk, "case", "control")]
-    chosen <- dosage_subset[ind_n %in% sample(10000, size=5000, replace=FALSE)]
+    chosen <- dosage_subset[ind_n %in% sample(10000, size=mappingPopulationSize, replace=FALSE)]
   }
 
 } else {
   # when PVE == 0
     chosen <- data.table("ind_n"=1:10000)
     chosen[, "group" := sample(c("case","control"), size=10000, replace=TRUE)]
-    chosen <- chosen[sample(.N, size=5000, replace=FALSE)]
+    chosen <- chosen[sample(.N, size=mappingPopulationSize, replace=FALSE)]
 }
   cat("working on case population freqs\n")
   caseFreqs <- calcFreqs(permuted_haplotypes[.(chosen[group=="case",ind_n]), allow.cartesian=TRUE], vcf)
