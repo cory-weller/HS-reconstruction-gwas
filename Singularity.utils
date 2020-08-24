@@ -1,0 +1,49 @@
+Bootstrap: docker 
+From: ubuntu:18.04
+
+
+%environment
+    R_VERSION=3.6.1
+    export R_VERSION
+    R_CONFIG_DIR=/etc/R/
+    export R_CONFIG_DIR
+    export LC_ALL=C
+    export PATH=$PATH
+
+%post
+    apt-get update
+    apt-get install -y apt-transport-https apt-utils software-properties-common
+    apt-get install -y add-apt-key
+    export DEBIAN_FRONTEND=noninteractive
+    ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
+    add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/'
+    apt-get -y update
+    apt-get install -y r-base r-base-dev
+    
+    #libcurl4-openssl-dev libopenmpi-dev openmpi-bin openmpi-common openmpi-doc openssh-client openssh-server libssh-dev wget vim git nano git cmake  gfortran g++ curl wget python autoconf bzip2 libtool libtool-bin python-pip python-dev
+
+    R --slave -e "install.packages('data.table')"
+    R --slave -e "install.packages('ggplot2')"
+    R --slave -e "install.packages('foreach')"
+    R --slave -e "install.packages('ggthemes')"
+    R --slave -e "install.packages('cowplot')"
+    R --slave -e "install.packages('doMC')"
+
+    # Install GATK plus tools
+    
+    #singularity build --sandbox ubuntu_s docker://ubuntu:bionic
+    #singularity exec ubuntu_s/ java -jar /opt/gatk.jar
+
+    apt-get install -y bwa tabix default-jre parallel bzip2 gzip sed grep zip wget
+    GATKVER="4.1.8.1"
+    wget "https://github.com/broadinstitute/gatk/releases/download/${GATKVER}/gatk-${GATKVER}.zip"
+    unzip "gatk-${GATKVER}.zip"
+    mv gatk-${GATKVER}/gatk-package-${GATKVER}-local.jar /opt/gatk.jar
+    rm -rf "gatk-${GATKVER}.zip" gatk-${GATKVER}
+    
+%files
+
+%runscript
+    R

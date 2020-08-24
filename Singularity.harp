@@ -2,19 +2,11 @@ BootStrap: docker
 From: ubuntu:xenial
 IncludeCmd: yes
 
-%environment
-    R_VERSION=3.6.1
-    export R_VERSION
-    R_CONFIG_DIR=/etc/R/
-    export R_CONFIG_DIR
-    export LC_ALL=C
-    export PATH=$PATH
-
 %post
     # Prerequisites
     apt-get update
     apt-get -y install build-essential autoconf git wget unzip libboost-all-dev libreadline-dev libncurses5-dev libncursesw5-dev zlib1g-dev libbz2-dev liblzma-dev nano
-
+  
     # Harp
     cd /opt
     ZIPFILE=ff5cc0b01f4a.zip
@@ -53,44 +45,6 @@ IncludeCmd: yes
 
     # bcftools cleanup
     mv /opt/harp/src/samtools/bcftools /opt
-
-    # R
-    apt-get update
-    apt-get install -y apt-transport-https apt-utils software-properties-common
-    apt-get install -y add-apt-key
-    export DEBIAN_FRONTEND=noninteractive
-    ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
-
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
-    add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/'
-    apt-get -y update
-    apt-get install -y r-base r-base-dev
-
-    # (mini)conda 3.8
-        CONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-        CONDA_HASH="879457af6a0bf5b34b48c12de31d4df0ee2f06a8e68768e5758c3293b2daf688"
-        wget $CONDA_URL
-        INSTALLER_HASH=$(sha256sum Miniconda3-latest-Linux-x86_64.sh | cut -d " " -f 1)
-        if [[ $INSTALLER_HASH == $CONDA_HASH ]]; then
-            #mkdir /root/.conda
-            bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda
-
-        else
-            echo "hash does not match expected value"
-        fi
-
-
-
-
-    # GATK
-    apt-get update
-    apt-get install -y zip
-    wget https://github.com/broadinstitute/gatk/releases/download/4.1.8.1/gatk-4.1.8.1.zip
-    unzip gatk-4.1.8.1.zip
-    cd gatk-4.1.8.1
-
-
-
     
 %runscript
     exec python $@

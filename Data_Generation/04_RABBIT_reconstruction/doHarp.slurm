@@ -23,6 +23,8 @@ projectDir="/scratch/${USER}/genome-reconstruction-revision/"
 outputDir="/scratch/${USER}/genome-reconstruction-revision/04_RABBIT/${population}/HARP_likelihood/"
 mkdir -p ${outputDir}
 
+declare -A lengths='([3L]="24543557" [X]="22422827" [3R]="27905053" [2R]="21146708" [2L]="23011544" )'
+
 # harp parameters
 window_step=100000
 window_width=100000
