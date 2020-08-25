@@ -54,4 +54,4 @@ From: ubuntu:18.04
 %files
 
 %runscript
-    R
+
