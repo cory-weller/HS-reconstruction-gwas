@@ -1,3 +1,12 @@
 Test_Run/*.bam
 *.sif
 Test_Run/*.csv
+Test_Run/*.fastq*
+Test_Run/*.fasta*
+Test_Run/*.dict*
+Test_Run/*.bam*
+Test_Run/*.bai*
+Test_Run/*.vcf*
+Test_Run/*.zip
+Test_Run/*.intervals
+Test_Run/*.txt
