@@ -32,7 +32,7 @@ From: ubuntu:18.04
     R --slave -e "install.packages('doMC')"
 
     # Install GATK4 plus tools
-    apt-get install -y bwa tabix default-jre openjdk-8-jdk parallel bzip2 gzip sed grep zip wget tar basename
+    apt-get install -y bwa tabix default-jre openjdk-8-jdk parallel bzip2 gzip sed grep zip wget tar coreutils
     GATKVER="4.1.8.1"
     wget "https://github.com/broadinstitute/gatk/releases/download/${GATKVER}/gatk-${GATKVER}.zip"
     unzip "gatk-${GATKVER}.zip"
