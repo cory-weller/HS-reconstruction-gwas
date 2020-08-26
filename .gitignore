@@ -1,3 +1,4 @@
+Test_Run/tmp/*
 Test_Run/*.bam
 *.sif
 Test_Run/*.csv
