@@ -10,7 +10,6 @@ Cory A. Weller (caw5cv@virginia.edu) & Alan O. Bergland (aob2x@virginia.edu)
 This workflow allows for Singularity containers to process data in a reproducible manner without installing required programs and libraries. The singularity recipe files `Singularity.harp` and `Singularity.utils` automatically push pre-built image files to Singularity Hub. Singularity must be installed on your system. Once singularity is installed, the pre-built image files can be pulled to this repository using the commands:
 
 ```bash
-singularity pull shub://cory-weller/HS-reconstruction-gwas:harp	
-singularity pull shub://cory-weller/HS-reconstruction-gwas:utils
-# TODO: Rename images to desired file name convention
+singularity pull --name harp.sif shub://cory-weller/HS-reconstruction-gwas:harp
+singularity pull --name utils.sif shub://cory-weller/HS-reconstruction-gwas:utils
 ```
