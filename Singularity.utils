@@ -32,7 +32,7 @@ From: ubuntu:18.04
     R --slave -e "install.packages('doMC')"
 
     # Install GATK4 plus tools
-    apt-get install -y bwa tabix default-jre openjdk-8-jdk parallel bzip2 gzip sed grep zip wget tar coreutils bedtools
+    apt-get install -y bwa tabix default-jre openjdk-8-jdk parallel bzip2 gzip sed grep zip wget tar coreutils
     GATKVER="4.1.8.1"
     wget "https://github.com/broadinstitute/gatk/releases/download/${GATKVER}/gatk-${GATKVER}.zip"
     unzip "gatk-${GATKVER}.zip"
@@ -50,6 +50,11 @@ From: ubuntu:18.04
     wget -O pear-0.9.11-linux-x86_64.tar.gz "https://onedrive.live.com/download?cid=77DD71E598E5B51B&resid=77DD71E598E5B51B%2118198&authkey=AHPKCVLrX8ZLCFQ"
     tar -zxvf pear-0.9.11-linux-x86_64.tar.gz
     mv pear-0.9.11-linux-x86_64/bin/pear /opt/pear
+
+    # Retrieve bedtools binary
+    wget -O bedtools https://github.com/arq5x/bedtools2/releases/download/v2.29.2/bedtools.static.binary
+    chmod 755 bedtools
+    mv bedtools /opt/
 
 %files
 
