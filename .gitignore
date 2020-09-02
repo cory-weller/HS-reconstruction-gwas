@@ -1,3 +1,4 @@
+sandbox_*
 Test_Run/tmp/*
 Test_Run/*.bam
 *.sif
