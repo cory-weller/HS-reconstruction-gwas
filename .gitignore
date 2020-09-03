@@ -12,3 +12,4 @@ Test_Run/*.vcf*
 Test_Run/*.zip
 Test_Run/*.intervals
 Test_Run/*.txt
+Test_Run/*.list
