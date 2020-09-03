@@ -115,18 +115,41 @@ exit 0
 # dgrp2.sorted.noIndel.vcf md5: c4793c71cf076964441944845ab8b921
 
 
+# Download repetitive region masking files
+mkdir -p tmp_repetitive/ && \
+singularity exec ${UTILS_SIF} wget http://hgdownload.soe.ucsc.edu/goldenPath/dm3/bigZips/chromOut.tar.gz
+tar -zxvf chromOut.tar.gz -C tmp_repetitive/ && \
+rm chromOut.tar.gz
+
+singularity exec ${UTILS_SIF} wget http://hgdownload.soe.ucsc.edu/goldenPath/dm3/bigZips/chromTrf.tar.gz
+tar -zxvf chromTrf.tar.gz -C tmp_repetitive/ && \
+rm chromTrf.tar.gz
+
+# Format as samtools ranges, e.g. CHROM:START-STOP
+# repeatmasker is 1-based, closed [start, end] 
+# bed is  0-based, half-open [start-1, end)
+# Format as 1-based .intervals and concatenate
+for CHR in 2L 2R 3L 3R X; do
+  cat <(awk 'BEGIN{OFS="\t"} NR > 3 {printf ("%s:%s-%s\n",$5,$6,$7)}' tmp_repetitive/${CHR}/chr${CHR}.fa.out) \
+      <(awk 'BEGIN{OFS="\t"} {printf ("%s:%s-%s\n", $1,$2+1,$3)}' tmp_repetitive/trfMaskChrom/chr${CHR}.bed) | \
+      sort -nk 2,3 | \
+      sed "s/chr//g" >> repetitive.list
+done && \
+rm -rf tmp_repetitive/
+
+# Index sorted vcf
+singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar IndexFeatureFile \
+  --input ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.vcf
+
+# Exclude repeptitive intervals
+singularity exec ${UTILS_SIF} java -Xmx2G -jar /opt/gatk4.jar SelectVariants \
+  --variant  ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.vcf \
+  --exclude-intervals repetitive.list \
+  --output ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
 
 
-
-
-
-
-
-
-
-
-
-
+# Generate HARP genotype csv
+singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
 
 
 
