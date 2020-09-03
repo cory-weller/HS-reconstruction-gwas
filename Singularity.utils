@@ -52,9 +52,10 @@ From: ubuntu:18.04
     mv pear-0.9.11-linux-x86_64/bin/pear /opt/pear
 
     # Retrieve bedtools binary
-    wget -O bedtools https://github.com/arq5x/bedtools2/releases/download/v2.29.2/bedtools.static.binary
-    chmod 755 bedtools
-    mv bedtools /opt/
+    # NOTE: Not needed for current version. Use GATK4 SelectVariants --exclude-intervals instead.
+    # wget -O bedtools https://github.com/arq5x/bedtools2/releases/download/v2.29.2/bedtools.static.binary
+    # chmod 755 bedtools
+    # mv bedtools /opt/
 
 %files
 
