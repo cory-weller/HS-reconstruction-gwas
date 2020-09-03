@@ -152,6 +152,94 @@ singularity exec ${UTILS_SIF} java -Xmx2G -jar /opt/gatk4.jar SelectVariants \
 singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
 
 
+# Generate associative array for chromosome lengths
+awk '{print $1,$2}' dmel-all-chromosome-r5.57.fasta.fai
+
+
+# Read chromosome lengths into associative array from the fasta index
+declare -A LENGTHS
+while read -r CHROM LENGTH; do
+  LENGTHS[${CHROM}]=${LENGTH}
+done < <(awk '{print $1,$2}' ${REFGENOME_FILENAME}.fai)
+
+
+# harp parameters
+HARP_STEP=100000
+HARP_WIDTH=100000
+chromosome="2L"
+chrLength="23011544"
+harp="/scratch/caw5cv/genome-reconstruction-revision/04_RABBIT/harp"
+REFGENOME_FILENAME="${projectDir}/input_data/dgrp2.reference.fasta"
+bamFolder="${projectDir}/02_simulate_reads/${population}/"
+priorsGzFile="${projectDir}/04_RABBIT/${population}/${chromosome}.subset.priors.csv.gz"
+
+BAM_FILENAME
+CHROMOSOME
+REFGENOME_FILENAME
+HARP_CSV_FILENAME
+ORIG_DIR=$(pwd)
+function getHarpFreqs {
+  BAM_FILENAME=${1}
+  CHROMOSOME=${2}
+  CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
+
+  CHROMOSOME=${3}
+  tmpWorkDir=${4}
+  outputDir=${5}
+  chrLength=${6}
+  REFGENOME_FILENAME=${7}
+  priors=${8}
+  window_step=${9}
+  window_width=${10}
+  harp=${11}
+
+  HARP_CSV_FILENAME="${CHROMOSOME}.harp.csv"
+
+  BAM="${ORIG_DIR}/${BAM_FILENAME}"
+  REFGENOME="${ORIG_DIR}/${REFGENOME_FILENAME}"
+  HARP_CSV="${ORIG_DIR}/${HARP_CSV_FILENAME}"
+
+  # make tmp work directory
+  echo creating directory "${tmpWorkDir}/${ind}"
+  mkdir -p "${tmpWorkDir}/${ind}" && cd "${tmpWorkDir}/${ind}"
+
+  # Run harp like
+  echo running harp like
+  singularity exec ${UTILS_SIF} /opt/harp like \
+  --bam ${BAM} \
+  --region ${CHROMOSOME}:1-${CHROMOSOME_LENGTH} \
+  --refseq ${REFGENOME} \
+  --snps ${HARP_CSV} \
+  --stem $ind.$CHROMOSOME
+
+  # Run harp freq
+  echo running harp freq
+ singularity exec ${UTILS_SIF} /opt/harp freq \
+  --bam ${BAM} \
+  --region ${CHROMOSOME}:1-${CHROMOSOME_LENGTH} \
+  --refseq ${REFGENOME} \
+  --snps ${HARP_CSV} \
+  --stem $ind.$CHROMOSOME \
+  --window_step ${HARP_STEP} \
+  --window_width ${HARP_WIDTH} \
+  --em_min_freq_cutoff 0.0001
+
+  # Cleanup and move out
+  echo cleaning up
+  cp "${ind}.${CHROMOSOME}.freqs" ${outputDir} && \
+  cd ${tmpWorkDir} && \
+  rm -rf ${tmpWorkDir}/${ind}
+  echo done
+}
+
+export -f getHarpFreqs
+
+
+
+
+
+
+
 
 
 
