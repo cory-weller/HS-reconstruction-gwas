@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if command -v realpath &> /dev/null; then
+if ! command -v realpath &> /dev/null; then
     echo "command realpath could not be found. Install coreutils?"
     exit
 fi
