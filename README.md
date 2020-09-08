@@ -6,8 +6,13 @@ This repository contains the scripts used to generate and process data, as well 
 
 Cory A. Weller (caw5cv@virginia.edu) & Alan O. Bergland (aob2x@virginia.edu)
 
-## Downloading singularity containers
-This workflow allows for Singularity containers to process data in a reproducible manner without installing required programs and libraries. The singularity recipe files `Singularity.harp` and `Singularity.utils` automatically push pre-built image files to Singularity Hub. Singularity must be installed on your system. Once singularity is installed, the pre-built image files can be pulled to this repository using the commands:
+## Singularity
+
+This workflow allows for Singularity containers to process data in a reproducible manner without installing required programs and libraries. You will first need to install singularity on your system, if it is not already available. Many HPC systems already have pre-loaded `singularity` that can be loaded as a module.
+
+Otherwise, install singularity 3.x following the instructions from [sylabs.io](https://sylabs.io/guides/3.6/user-guide/quick_start.html#quick-installation-steps).
+
+Then, you can retrieve the pre-built singularity image files from Singularity Hub. 
 
 ```bash
 singularity pull --name harp.sif shub://cory-weller/HS-reconstruction-gwas:harp
