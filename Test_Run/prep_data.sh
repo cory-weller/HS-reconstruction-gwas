@@ -5,7 +5,7 @@ if ! command -v realpath &> /dev/null; then
     exit
 fi
 
-CHROMOSOMES=( "2L" "2R" "3L" "3R" "X" )
+CHROMOSOMES=( "$@" )
 
 UTILS_SIF=$(realpath ../utils.sif)
 HARP_SIF=$(realpath ../harp.sif)
@@ -18,11 +18,17 @@ VCF_BGZIP_MD5="f4d8551dacf10b6e790d53deeed1f02a"
 VCF_GZIP_MD5="a9ece6b8c4c6b8aaf6797874eaddb369"
 VCF_FILENAME=$(singularity exec ${UTILS_SIF} basename ${VCF_URL})
 
+# Download re-hosted DGRP recombination map, from The Many Landscapes of Recombination in Drosophila melanogaster, Comeron et al. 2012
+RECOMBINATION_MAP_URL="https://onedrive.live.com/download?cid=77DD71E598E5B51B&resid=77DD71E598E5B51B%2118790&authkey=AGfjnHFJK6dsNBk"
+RECOMBINATION_MAP_FILENAME="dgrp2.recombination_map.bed"
+wget -O ${RECOMBINATION_MAP_FILENAME} ${RECOMBINATION_MAP_URL}
+
 # Reference Genome: Drosophila melanogaster release 5, version 57
 REFGENOME_URL="ftp://ftp.flybase.net/genomes/Drosophila_melanogaster/dmel_r5.57_FB2014_03/fasta/dmel-all-chromosome-r5.57.fasta.gz"
 REFGENOME_FILENAME=$(singularity exec ${UTILS_SIF} basename ${REFGENOME_URL})
 REFGENOME_GZIP_MD5="f6e168a1fe8741be2fdce6c2d0602b41"
 REFGENOME_MD5="203ef91d30c76497cd1391a0d2f92827"
+
 
 # download bam files
 # wget -O 73.test_run.bam "https://onedrive.live.com/download?cid=77DD71E598E5B51B&resid=77DD71E598E5B51B%2118194&authkey=AJNA5CF5UX1bsLI"
@@ -52,6 +58,17 @@ fi
 singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar CreateSequenceDictionary \
   -R "${REFGENOME_FILENAME}" \
   -O "${REFGENOME_FILENAME%.fasta}".dict
+
+# Generate lengths.txt file containing chromosome lengths
+declare -A LENGTHS
+while read -r CHROM LENGTH; do
+  if printf '%s\n' "${CHROMOSOMES[@]}" | grep -q -P "^${CHROM}$"; then
+    echo ${CHROM} ${LENGTH} >> lengths.txt
+  fi
+done < <(awk '{print $1,$2}' ${REFGENOME_FILENAME}.fai)
+
+# Write chromosome length file
+printf '%s\n' "${myarray[@]}" | grep -P '^mypattern$'
 
 # Prepare SAMTOOLS index
 singularity exec ${HARP_SIF} samtools faidx ${REFGENOME_FILENAME}
