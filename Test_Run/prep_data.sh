@@ -186,6 +186,24 @@ EOF
 fi
 done
 
+# prepare heterozygous VCF file for ASEReadCounter
+for CHROMOSOME in ${CHROMOSOMES[@]}; do
+  awk -F "\t" -v CHR=${CHROMOSOME}  '
+  BEGIN{OFS="\t";}
+  {
+  if ($1 ~ /^##/)
+          print $0;
+  else if ($1 ~ /^#CHROM/)
+          print $1,$2,$3,$4,$5,$6,$7,$8,$9,"HET";
+  else if ($1 ~ CHR)
+          print $1,$2,$3,$4,$5,$6,$7,$8,$9,"0/1";
+  }' <(cat ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf) > ${CHROMOSOME}.variants.het.vcf
+
+  singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar IndexFeatureFile --input ${CHROMOSOME}.variants.het.vcf
+done
+
+
+
 exit 0
 ### STOP HERE FOR NOW
 
