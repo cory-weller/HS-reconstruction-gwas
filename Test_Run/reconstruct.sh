@@ -8,13 +8,16 @@ HARP_SIF=$(realpath ../harp.sif)
 TMP="/home/cory/tmpStorage"
 ORIG_DIR=$(pwd)
 
+RABBIT_MAX_FOUNDERS="16"
+RABBIT_MAX_SITES="5000"
+
 # cycles through every chromosome within a .bam file to generate .freqs output
 
-# Read chromosome lengths into associative array from the fasta index
+# Read chromosome lengths into associative array from lenghts.txt
 declare -A LENGTHS
 while read -r CHROM LENGTH; do
     LENGTHS[${CHROM}]=${LENGTH}
-done < <(awk '{print $1,$2}' ${REFGENOME_FILENAME}.fai)
+done < lengths.txt
 
 function getHarpFreqs {
     HARP_STEP=100000
@@ -90,6 +93,19 @@ for FILENAME in *.harp.csv; do
         echo "${BAM_FILESTEM}.${CHROMOSOME}.mla already exists"
     fi
 
+    # Count Reads
+    if [[ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.readcounts ]]; then
+    echo "Running ASEReadCounter on ${CHROMOSOME} for ${BAM_FILESTEM}"
+    singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar ASEReadCounter \
+        --reference ${REFGENOME_FILENAME} \
+        --input ${BAM_FILENAME} \
+        --output ${BAM_FILESTEM}.${CHROMOSOME}.readcounts \
+        --variant ${CHROMOSOME}.variants.het.vcf
+
+    # Run RABBIT
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.readcounts already exists"
+    fi
 done
 
 
