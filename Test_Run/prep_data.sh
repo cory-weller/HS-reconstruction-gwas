@@ -5,6 +5,8 @@ if ! command -v realpath &> /dev/null; then
     exit
 fi
 
+CHROMOSOMES=( "2L" "2R" "3L" "3R" "X" )
+
 UTILS_SIF=$(realpath ../utils.sif)
 HARP_SIF=$(realpath ../harp.sif)
 
@@ -132,7 +134,7 @@ rm chromTrf.tar.gz
 # repeatmasker is 1-based, closed [start, end] 
 # bed is  0-based, half-open [start-1, end)
 # Format as 1-based .intervals and concatenate
-for CHR in 2L 2R 3L 3R X; do
+for CHR in ${CHROMOSOMES[@]}; do
   cat <(awk 'BEGIN{OFS="\t"} NR > 3 {printf ("%s:%s-%s\n",$5,$6,$7)}' tmp_repetitive/${CHR}/chr${CHR}.fa.out) \
       <(awk 'BEGIN{OFS="\t"} {printf ("%s:%s-%s\n", $1,$2+1,$3)}' tmp_repetitive/trfMaskChrom/chr${CHR}.bed) | \
       sort -nk 2,3 | \
@@ -150,11 +152,39 @@ singularity exec ${UTILS_SIF} java -Xmx2G -jar /opt/gatk4.jar SelectVariants \
   --exclude-intervals repetitive.list \
   --output ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
 
-
 # Generate HARP genotype csv files
 singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
 
+# Generate HARP input haplotypes
+for CHROMOSOME in ${CHROMOSOMES[@]}; do
+if [ ! -f ${CHROMOSOME}.RABBIT.vcf ]; then
+singularity exec ${UTILS_SIF} Rscript - ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf ${CHROMOSOME} <<EOF
+  args <- commandArgs(trailingOnly=TRUE)
+  vcf_filename <- args[1]
+  chromosome <- args[2]
 
+  library(data.table)
+  vcf <- fread(input = vcf_filename, skip="#CHROM", na.strings= "./." )
+  setkey(vcf, "#CHROM")
+  founders <- colnames(vcf)[10:length(colnames(vcf))]
+  vcf <- vcf[.(chromosome), c("#CHROM","POS",founders), with=F]
+
+  # convert to RABBIT format, where ref  = 1, alt=2
+  if(any(vcf=="0/0") | any(vcf=="1/1")) {
+    # Convert to factor with level 1 = "0/0", level 2 = "1/1"
+    vcf[, (founders) := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=founders]
+
+    # Convert to numeric
+    vcf[, (founders) := lapply(.SD, as.numeric), .SDcols=founders]
+
+    # Subtract 1, such that "0/0" is now 0, "1/1" is now 1, missing is NA
+    vcf[, (founders) := lapply(.SD, "-", 1), .SDcols=founders]
+
+    fwrite(vcf, file=paste(chromosome, ".RABBIT.vcf" , sep=""), quote=FALSE, na="NA")
+  }
+EOF
+fi
+done
 
 exit 0
 ### STOP HERE FOR NOW
