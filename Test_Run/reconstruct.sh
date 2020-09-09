@@ -69,12 +69,27 @@ function getHarpFreqs {
 
 export -f getHarpFreqs
 
+# Iterate through chromosomes with extant *.harp.csv file
 for FILENAME in *.harp.csv; do
     CHROMOSOME=${FILENAME%.harp.csv}
     CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
 
-    echo ${CHROMOSOME} for $BAM_FILESTEM
-    getHarpFreqs ${BAM_FILENAME} ${BAM_FILESTEM} ${CHROMOSOME} ${CHROMOSOME_LENGTH} ${REFGENOME_FILENAME} ${ORIG_DIR} ${TMP}
+    # Get HARP freqs
+    if [[ ! -f "${BAM_FILESTEM}.${CHROMOSOME}.freqs" ]]; then
+        echo "Running HARP on ${CHROMOSOME} for ${BAM_FILESTEM}"
+        getHarpFreqs "${BAM_FILENAME}" "${BAM_FILESTEM}" "${CHROMOSOME}" "${CHROMOSOME_LENGTH}" "${REFGENOME_FILENAME}" "${ORIG_DIR}" "${TMP}"
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.freqs already exists"
+    fi
+
+    # Get MLA (write .mla file) for this chromosome
+    if [[ ! -f "${BAM_FILESTEM}.${CHROMOSOME}.mla" ]]; then
+        echo "Calculating most likely ancestors for ${CHROMOSOME} for ${BAM_FILESTEM}"
+        singularity exec ${UTILS_SIF} Rscript get_MLA.R ${BAM_FILESTEM} ${CHROMOSOME}
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.mla already exists"
+    fi
+
 done
 
 
