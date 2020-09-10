@@ -17,3 +17,5 @@ Test_Run/*.freqs
 Test_Run/*.mla
 Test_Run/*.readcounts
 Test_Run/*.bed
+Test_Run/*.in
+Test_Run/*.m
