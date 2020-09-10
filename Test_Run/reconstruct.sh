@@ -3,6 +3,7 @@
 BAM_FILESTEM=${1%.final.bam}
 BAM_FILENAME=$(realpath ${1})
 REFGENOME_FILENAME=$(realpath ${2})
+N_GENERATIONS=${3}
 UTILS_SIF=$(realpath ../utils.sif)
 HARP_SIF=$(realpath ../harp.sif)
 TMP="/home/cory/tmpStorage"
@@ -73,8 +74,7 @@ function getHarpFreqs {
 export -f getHarpFreqs
 
 # Iterate through chromosomes with extant *.harp.csv file
-for FILENAME in *.harp.csv; do
-    CHROMOSOME=${FILENAME%.harp.csv}
+for CHROMOSOME in ${!LENGTHS[@]}; do
     CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
 
     # Get HARP freqs
@@ -101,11 +101,53 @@ for FILENAME in *.harp.csv; do
         --input ${BAM_FILENAME} \
         --output ${BAM_FILESTEM}.${CHROMOSOME}.readcounts \
         --variant ${CHROMOSOME}.variants.het.vcf
-
-    # Run RABBIT
     else
         echo "${BAM_FILESTEM}.${CHROMOSOME}.readcounts already exists"
     fi
+
+    # Build RABBIT input
+    if [[ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.in ]]; then
+        echo "Generating ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.in"
+        singularity exec ${UTILS_SIF} Rscript build_RABBIT_input.R ${BAM_FILESTEM} ${CHROMOSOME} ${RABBIT_MAX_FOUNDERS} ${RABBIT_MAX_SITES}
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.in already exists"
+    fi
+
+    # If F1 population, increment generation by 1 to allow heterozygous RABBIT imputation
+    if [[ ${N_GENERATIONS} == "1" ]]; then
+        let RABBIT_GENERATIONS=${N_GENERATIONS}+1
+    else
+        let RABBIT_GENERATIONS=${N_GENERATIONS}
+    fi
+
+    if [[ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m ]]; then
+        echo "Generating ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
+        # Generate mathematica script for RABBIT
+        CURRENT_DIR=$(pwd)
+        RABBIT_DIR=$(realpath "RABBIT/RABBIT_Packages/")
+        RABBIT_eps="0.005"
+        RABBIT_epsF="0.005"
+        RABBIT_MODEL="jointModel"
+        RABBIT_EST_FUN="origViterbiDecoding"
+
+        singularity exec ${UTILS_SIF} python3 - <<EOF > ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m
+print("""SetDirectory["%s"]""" % "${RABBIT_DIR}")
+print("""Needs["MagicReconstruct\`"]""")
+print("""SetDirectory["%s"]""" % "${CURRENT_DIR}/")
+print("""popScheme = Table["RM1-E", {%s}]""" % "${RABBIT_GENERATIONS}")
+print('epsF = %s' % "${RABBIT_epsF}")
+print('eps = %s' % "${RABBIT_eps}")
+print('model = "%s"' % "${RABBIT_MODEL}")
+print('estfun = "%s"' % "${RABBIT_EST_FUN}")
+print('inputfile = "%s"' % "${BAM_FILESTEM}.${chromosome}.RABBIT.in")
+print('resultFile = "%s.txt"' % "${BAM_FILESTEM}.${chromosome}.RABBIT.out")
+print("""magicReconstruct[inputfile, model, RABBIT_epsF, eps, popScheme, resultFile, HMMMethod -> estfun, PrintTimeElapsed -> True]""")
+print('summaryFile = StringDrop[resultFile, -4] <> ".csv"')
+print('saveAsSummaryMR[resultFile, summaryFile]')
+print('Exit')
+EOF
+
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m already exists"
+    fi
 done
-
-
