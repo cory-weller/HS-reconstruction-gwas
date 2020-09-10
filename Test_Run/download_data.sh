@@ -9,6 +9,13 @@ CHROMOSOMES=( "$@" )
 UTILS_SIF=$(realpath ../utils.sif)
 HARP_SIF=$(realpath ../harp.sif)
 
+if [ ! -f "${HARP_SIF}" ]; then
+    singularity pull --name ${HARP_SIF} shub://cory-weller/HS-reconstruction-gwas:harp
+fi
+
+if [ ! -f "${UTILS_SIF}" ]; then
+    singularity pull --name ${UTILS_SIF} shub://cory-weller/HS-reconstruction-gwas:utils
+fi
 
 # VCF_URL="http://dgrp2.gnets.ncsu.edu/data/website/dgrp2.vcf" # gzipped version from zenodo faster to download (equivalent md5 sum)
 VCF_URL="https://zenodo.org/api/files/eef9cec5-1bf4-498e-8ac6-e90aa8c8ab1c/dgrp2.vcf.gz"
