@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 
 BAM_FILESTEM=${1%.final.bam}
-BAM_FILENAME=$(realpath ${1})
-REFGENOME_FILENAME=$(realpath ${2})
+BAM_FILENAME="$(pwd)/${1}"
+REFGENOME_FILENAME="$(pwd)/${2}"
 N_GENERATIONS=${3}
-UTILS_SIF=$(realpath ../utils.sif)
-HARP_SIF=$(realpath ../harp.sif)
-TMP="/home/cory/tmpStorage"
+UTILS_SIF="$(pwd)/../utils.sif"
+HARP_SIF="$(pwd)/../harp.sif"
+TMP="/dev/shm/caw5cv/tmp/"
 ORIG_DIR=$(pwd)
-
-HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMSOME}.haplotypes"
-RABBIT_CSV="${BAM_FILESTEM}.${CHROMSOME}.RABBIT.out.csv"
-
 
 RABBIT_MAX_FOUNDERS="16"
 RABBIT_MAX_SITES="5000"
+
+
 
 # cycles through every chromosome within a .bam file to generate .freqs output
 
@@ -79,7 +77,10 @@ export -f getHarpFreqs
 
 # Iterate through chromosomes with extant *.harp.csv file
 for CHROMOSOME in ${!LENGTHS[@]}; do
+     cd ${ORIG_DIR}
     CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
+    HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMSOME}.haplotypes"
+    RABBIT_CSV="${BAM_FILESTEM}.${CHROMSOME}.RABBIT.out.csv"
 
     # Get HARP freqs
     if [[ ! -f "${BAM_FILESTEM}.${CHROMOSOME}.freqs" ]]; then
@@ -127,8 +128,8 @@ for CHROMOSOME in ${!LENGTHS[@]}; do
     if [[ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m ]]; then
         echo "Generating ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
         # Generate mathematica script for RABBIT
-        CURRENT_DIR=$(pwd)
-        RABBIT_DIR=$(realpath "RABBIT/RABBIT_Packages/")
+        CURRENT_DIR=${ORIG_DIR}
+        RABBIT_DIR="${ORIG_DIR}/RABBIT/RABBIT_Packages/"
         RABBIT_eps="0.005"
         RABBIT_epsF="0.005"
         RABBIT_MODEL="jointModel"
@@ -163,6 +164,7 @@ if [ -f "${RABBIT_CSV}" ]; then
     echo skipping RABBIT for this individual
     continue
 else
+    echo "running mathematica"
     math -noprompt -script "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
 fi
 
