@@ -155,9 +155,6 @@ EOF
     else
         echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m already exists"
     fi
-done
-
-
 
 if [ -f "${RABBIT_CSV}" ]; then
     echo "${RABBIT_CSV}" already exists
