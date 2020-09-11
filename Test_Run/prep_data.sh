@@ -43,25 +43,33 @@ REFGENOME_MD5="203ef91d30c76497cd1391a0d2f92827"
 
 # Create reference sequence dictionary
 if [ ! -f "${REFGENOME%.fasta}".dict ]; then
-singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar CreateSequenceDictionary \
-    -R "${REFGENOME}" \
-    -O "${REFGENOME%.fasta}".dict
+    echo "Building reference sequence dictionary"
+    singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar CreateSequenceDictionary \
+        -R "${REFGENOME}" \
+        -O "${REFGENOME%.fasta}".dict
 else
     echo "Reference sequence dictionary ${REFGENOME}.fasta.dict already generated..."
 fi
 
 # Prepare SAMTOOLS index
 if [ ! -f "${REFGENOME}.fai" ]; then
+    echo "Building samtools index"
     singularity exec ${HARP_SIF} samtools faidx ${REFGENOME}
 else
     echo "Samtools index ${REFGENOME}.fai already generated..."
 fi
 
 # Prepare BWA index
-singularity exec ${UTILS_SIF} bwa index ${REFGENOME}
+if [ ! -f "${REFGENOME}.amb" ]; then
+    echo "Building BWA index"
+    singularity exec ${UTILS_SIF} bwa index ${REFGENOME}
+else
+    echo "BWA index already generated..."
+fi
 
 # Generate lengths.txt file containing chromosome lengths
 declare -A LENGTHS
+if [ -f lengths.txt ]; then rm lenghts.txt; fi
 while read -r CHROM LENGTH; do
     if printf '%s\n' "${CHROMOSOMES[@]}" | grep -q -P "^${CHROM}$"; then
         echo ${CHROM} ${LENGTH} >> lengths.txt
@@ -84,7 +92,7 @@ if [[ ! -f ${VCF_ZIPPED%.vcf.gz}.sorted.vcf ]]; then
             --SEQUENCE_DICTIONARY ${REFGENOME%.fasta}.dict \
             --MAX_RECORDS_IN_RAM 100000
     echo "BGZIP on sorted VCF..."
-    singularity exec ${UTILS_SIF} bgzip ${VCF_ZIPPED%.vcf.gz}.sorted.vcf
+    singularity exec ${UTILS_SIF} bgzip -f ${VCF_ZIPPED%.vcf.gz}.sorted.vcf
     # dgrp2.sorted.vcf.gz md5sum: e8364935cb63d5fc945a072321d8631c
 fi
 
@@ -118,47 +126,53 @@ rm -rf tmp_repetitive/
 
 # Index sorted vcf
 singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar IndexFeatureFile \
-    --input ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.vcf
+    --input ${VCF%.vcf}.sorted.noIndel.vcf
 
 # Exclude repeptitive intervals
-singularity exec ${UTILS_SIF} java -Xmx2G -jar /opt/gatk4.jar SelectVariants \
-    --variant    ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.vcf \
+singularity exec ${UTILS_SIF} java -Xmx4G -jar /opt/gatk4.jar SelectVariants \
+    --variant    ${VCF%.vcf}.sorted.noIndel.vcf \
     --exclude-intervals repetitive.list \
-    --output ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
+    --output ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 
 # Generate HARP genotype csv files
-singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf
+singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 
 # Generate HARP input haplotypes
 for CHROMOSOME in ${CHROMOSOMES[@]}; do
-if [ ! -f ${CHROMOSOME}.RABBIT.vcf ]; then
-singularity exec ${UTILS_SIF} Rscript - ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf ${CHROMOSOME} <<EOF
-    args <- commandArgs(trailingOnly=TRUE)
-    vcf_filename <- args[1]
-    chromosome <- args[2]
-
-    library(data.table)
-    vcf <- fread(input = vcf_filename, skip="#CHROM", na.strings= "./." )
-    setkey(vcf, "#CHROM")
-    founders <- colnames(vcf)[10:length(colnames(vcf))]
-    vcf <- vcf[.(chromosome), c("#CHROM","POS",founders), with=F]
-
-    # convert to RABBIT format, where ref    = 1, alt=2
-    if(any(vcf=="0/0") | any(vcf=="1/1")) {
-        # Convert to factor with level 1 = "0/0", level 2 = "1/1"
-        vcf[, (founders) := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=founders]
-
-        # Convert to numeric
-        vcf[, (founders) := lapply(.SD, as.numeric), .SDcols=founders]
-
-        # Subtract 1, such that "0/0" is now 0, "1/1" is now 1, missing is NA
-        vcf[, (founders) := lapply(.SD, "-", 1), .SDcols=founders]
-
-        fwrite(vcf, file=paste(chromosome, ".RABBIT.vcf" , sep=""), quote=FALSE, na="NA")
-    }
-EOF
-fi
+    singularity exec ${UTILS_SIF} python3 generate_RABBIT_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 done
+
+# replaced with python function above
+# for CHROMOSOME in ${CHROMOSOMES[@]}; do
+# if [ ! -f ${CHROMOSOME}.RABBIT.vcf ]; then
+# singularity exec ${UTILS_SIF} Rscript - ${VCF%.vcf}.sorted.noIndel.noRep.vcf ${CHROMOSOME} <<EOF
+#     args <- commandArgs(trailingOnly=TRUE)
+#     vcf_filename <- args[1]
+#     chromosome <- args[2]
+
+#     library(data.table)
+#     vcf <- fread(input = vcf_filename, skip="#CHROM", na.strings= "./." )
+#     setkey(vcf, "#CHROM")
+#     founders <- colnames(vcf)[10:length(colnames(vcf))]
+#     vcf <- vcf[.(chromosome), c("#CHROM","POS",founders), with=F]
+
+#     if(any(vcf=="0/0") | any(vcf=="1/1")) {
+#         # Convert to factor with level 1 = "0/0", level 2 = "1/1"
+#         vcf[, (founders) := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=founders]
+
+#         # Convert to numeric
+#         vcf[, (founders) := lapply(.SD, as.numeric), .SDcols=founders]
+
+#         # Subtract 1, such that "0/0" is now 0, "1/1" is now 1, missing is NA
+#         vcf[, (founders) := lapply(.SD, "-", 1), .SDcols=founders]
+
+#         fwrite(vcf, file=paste(chromosome, ".RABBIT.vcf" , sep=""), quote=FALSE, na="NA")
+#     }
+# EOF
+# fi
+# done
+
+# 
 
 # prepare heterozygous VCF file for ASEReadCounter
 for CHROMOSOME in ${CHROMOSOMES[@]}; do
@@ -171,7 +185,7 @@ for CHROMOSOME in ${CHROMOSOMES[@]}; do
                     print $1,$2,$3,$4,$5,$6,$7,$8,$9,"HET";
     else if ($1 ~ CHR)
                     print $1,$2,$3,$4,$5,$6,$7,$8,$9,"0/1";
-    }' <(cat ${VCF_FILENAME%.vcf.gz}.sorted.noIndel.noRep.vcf) > ${CHROMOSOME}.variants.het.vcf
+    }' <(cat ${VCF%.vcf}.sorted.noIndel.noRep.vcf) > ${CHROMOSOME}.variants.het.vcf
 
     singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar IndexFeatureFile --input ${CHROMOSOME}.variants.het.vcf
 done
