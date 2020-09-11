@@ -4,10 +4,7 @@ if ! command -v realpath &> /dev/null; then
     exit
 fi
 
-CHROMOSOMES=( "$@" )
-
-UTILS_SIF=$(realpath ../utils.sif)
-HARP_SIF=$(realpath ../harp.sif)
+source PARAMETERS.config
 
 if [ ! -f "${HARP_SIF}" ]; then
     singularity pull --name ${HARP_SIF} shub://cory-weller/HS-reconstruction-gwas:harp
@@ -17,21 +14,10 @@ if [ ! -f "${UTILS_SIF}" ]; then
     singularity pull --name ${UTILS_SIF} shub://cory-weller/HS-reconstruction-gwas:utils
 fi
 
-# VCF_URL="http://dgrp2.gnets.ncsu.edu/data/website/dgrp2.vcf" # gzipped version from zenodo faster to download (equivalent md5 sum)
-VCF_URL="https://zenodo.org/api/files/eef9cec5-1bf4-498e-8ac6-e90aa8c8ab1c/dgrp2.vcf.gz"
-VCF_MD5="af831816f41fe4a779e9abb44c5cdc62"
-VCF_BGZIP_MD5="f4d8551dacf10b6e790d53deeed1f02a"
-VCF_GZIP_MD5="a9ece6b8c4c6b8aaf6797874eaddb369"
-
-# Download re-hosted DGRP recombination map, from The Many Landscapes of Recombination in Drosophila melanogaster, Comeron et al. 2012
-RECOMBINATION_MAP_URL="https://onedrive.live.com/download?cid=77DD71E598E5B51B&resid=77DD71E598E5B51B%2118790&authkey=AGfjnHFJK6dsNBk"
-RECOMBINATION_MAP_FILENAME="dgrp2.recombination_map.bed"
 if [[ ! -f ${RECOMBINATION_MAP_FILENAME} ]]; then
     wget -O ${RECOMBINATION_MAP_FILENAME} ${RECOMBINATION_MAP_URL}
 fi
 
-# Reference Genome: Drosophila melanogaster release 5, version 57
-REFGENOME_URL="ftp://ftp.flybase.net/genomes/Drosophila_melanogaster/dmel_r5.57_FB2014_03/fasta/dmel-all-chromosome-r5.57.fasta.gz"
 if [ "${REFGENOME_URL: -3}" == ".gz" ]; then
     REFGENOME_ZIPPED=$(basename "${REFGENOME_URL}")
     REFGENOME="${REFGENOME_ZIPPED%.gz}"
@@ -47,8 +33,6 @@ elif [ "${VCF_URL: -4}" == ".vcf" ]; then
     VCF_ZIPPED="${VCF}.gz"
 fi
 
-REFGENOME_GZIP_MD5="f6e168a1fe8741be2fdce6c2d0602b41"
-REFGENOME_MD5="203ef91d30c76497cd1391a0d2f92827"
 
 
 # download bam files
@@ -97,10 +81,10 @@ fi
 
 # Download repetitive region masking files
 mkdir -p tmp_repetitive/ && \
-wget http://hgdownload.soe.ucsc.edu/goldenPath/dm3/bigZips/chromOut.tar.gz
+wget ${REP_MASK_1}
 tar -zxvf chromOut.tar.gz -C tmp_repetitive/ && \
 rm chromOut.tar.gz
 
-wget http://hgdownload.soe.ucsc.edu/goldenPath/dm3/bigZips/chromTrf.tar.gz
+wget ${REP_MASK_2}
 tar -zxvf chromTrf.tar.gz -C tmp_repetitive/ && \
 rm chromTrf.tar.gz
