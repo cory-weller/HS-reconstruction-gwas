@@ -146,7 +146,7 @@ print('model = "%s"' % "${RABBIT_MODEL}")
 print('estfun = "%s"' % "${RABBIT_EST_FUN}")
 print('inputfile = "%s"' % "${BAM_FILESTEM}.${chromosome}.RABBIT.in")
 print('resultFile = "%s.txt"' % "${BAM_FILESTEM}.${chromosome}.RABBIT.out")
-print("""magicReconstruct[inputfile, model, RABBIT_epsF, eps, popScheme, resultFile, HMMMethod -> estfun, PrintTimeElapsed -> True]""")
+print("""magicReconstruct[inputfile, model, epsF, eps, popScheme, resultFile, HMMMethod -> estfun, PrintTimeElapsed -> True]""")
 print('summaryFile = StringDrop[resultFile, -4] <> ".csv"')
 print('saveAsSummaryMR[resultFile, summaryFile]')
 print('Exit')
@@ -156,8 +156,8 @@ EOF
         echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m already exists"
     fi
 
-if [ -f "${RABBIT_CSV}" ]; then
-    echo "${RABBIT_CSV}" already exists
+if [ -f "${HAPLOTYPES_FILE}" ]; then
+    echo "${HAPLOTYPES_FILE}" already exists
     echo skipping RABBIT for this individual
     continue
 else
