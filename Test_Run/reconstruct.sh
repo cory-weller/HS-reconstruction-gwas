@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 
+source PARAMETERS.config
+
 BAM_FILESTEM=${1%.final.bam}
-BAM_FILENAME="$(pwd)/${1}"
-REFGENOME_FILENAME="$(pwd)/${2}"
-N_GENERATIONS=${3}
-UTILS_SIF="$(pwd)/../utils.sif"
-HARP_SIF="$(pwd)/../harp.sif"
-TMP="/dev/shm/caw5cv/tmp/"
-ORIG_DIR=$(pwd)
+BAM_FULLPATH="$(pwd)/${1}"
 
-RABBIT_MAX_FOUNDERS="16"
-RABBIT_MAX_SITES="5000"
-
-
-
-# cycles through every chromosome within a .bam file to generate .freqs output
+REFGENOME_FULLPATH="$(pwd)/${REFGENOME}"
 
 # Read chromosome lengths into associative array from lenghts.txt
 declare -A LENGTHS
@@ -25,11 +16,11 @@ done < lengths.txt
 function getHarpFreqs {
     HARP_STEP=100000
     HARP_WIDTH=100000
-    BAM_FILENAME=${1}
+    BAM_FULLPATH=${1}
     BAM_FILESTEM=${2}
     CHROMOSOME=${3}
     CHROMOSOME_LENGTH=${4}
-    REFGENOME_FILENAME=${5}
+    REFGENOME_FULLPATH=${5}
     ORIG_DIR=${6}
     TMP=${7}
     TMP_WORK_DIR="${TMP}/${BAM_FILESTEM}/${CHROMOSOME}"
@@ -46,18 +37,18 @@ function getHarpFreqs {
     # Run harp like
     echo running harp like
         singularity exec ${HARP_SIF} harp like \
-        --bam ${BAM_FILENAME} \
+        --bam ${BAM_FULLPATH} \
         --region ${CHROMOSOME}:1-${CHROMOSOME_LENGTH} \
-        --refseq ${REFGENOME_FILENAME} \
+        --refseq ${REFGENOME_FULLPATH} \
         --snps ${HARP_CSV_FILENAME} \
         --stem ${BAM_FILESTEM}.${CHROMOSOME}
 
     # Run harp freq
     echo running harp freq
     singularity exec ${HARP_SIF} harp freq \
-        --bam ${BAM_FILENAME} \
+        --bam ${BAM_FULLPATH} \
         --region ${CHROMOSOME}:1-${CHROMOSOME_LENGTH} \
-        --refseq ${REFGENOME_FILENAME} \
+        --refseq ${REFGENOME_FULLPATH} \
         --snps ${HARP_CSV_FILENAME} \
         --stem ${BAM_FILESTEM}.${CHROMOSOME} \
         --window_step ${HARP_STEP} \
@@ -79,13 +70,13 @@ export -f getHarpFreqs
 for CHROMOSOME in ${!LENGTHS[@]}; do
      cd ${ORIG_DIR}
     CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
-    HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMSOME}.haplotypes"
-    RABBIT_CSV="${BAM_FILESTEM}.${CHROMSOME}.RABBIT.out.csv"
+    HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMOSOME}.haplotypes"
+    RABBIT_CSV="${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.csv"
 
     # Get HARP freqs
     if [[ ! -f "${BAM_FILESTEM}.${CHROMOSOME}.freqs" ]]; then
         echo "Running HARP on ${CHROMOSOME} for ${BAM_FILESTEM}"
-        getHarpFreqs "${BAM_FILENAME}" "${BAM_FILESTEM}" "${CHROMOSOME}" "${CHROMOSOME_LENGTH}" "${REFGENOME_FILENAME}" "${ORIG_DIR}" "${TMP}"
+        getHarpFreqs "${BAM_FULLPATH}" "${BAM_FILESTEM}" "${CHROMOSOME}" "${CHROMOSOME_LENGTH}" "${REFGENOME_FULLPATH}" "${ORIG_DIR}" "${TMP}"
     else
         echo "${BAM_FILESTEM}.${CHROMOSOME}.freqs already exists"
     fi
@@ -102,8 +93,8 @@ for CHROMOSOME in ${!LENGTHS[@]}; do
     if [[ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.readcounts ]]; then
     echo "Running ASEReadCounter on ${CHROMOSOME} for ${BAM_FILESTEM}"
     singularity exec ${UTILS_SIF} java -jar /opt/gatk4.jar ASEReadCounter \
-        --reference ${REFGENOME_FILENAME} \
-        --input ${BAM_FILENAME} \
+        --reference ${REFGENOME_FULLPATH} \
+        --input ${BAM_FULLPATH} \
         --output ${BAM_FILESTEM}.${CHROMOSOME}.readcounts \
         --variant ${CHROMOSOME}.variants.het.vcf
     else
@@ -159,7 +150,6 @@ EOF
 if [ -f "${HAPLOTYPES_FILE}" ]; then
     echo "${HAPLOTYPES_FILE}" already exists
     echo skipping RABBIT for this individual
-    continue
 else
     echo "running mathematica"
     math -noprompt -script "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
@@ -174,7 +164,7 @@ echo -e "chromosome\tstart\tstop\tpar1\tpar2" > "${HAPLOTYPES_FILE}"
 N_LINES=$(wc -l ${RABBIT_CSV} | awk '{print $1}')
 if [ "${N_LINES}" == 1 ]; then
     ID=$(awk '{print $3}' ${RABBIT_CSV})
-    echo -e "${CHROMOSOME}\t1\t25000000\t${ID}\t${ID}" >> "${HAPLOTYPES_FILE}"
+    echo -e "${CHROMOSOME}\t1\t${CHROMOSOME_LENGTH}\t${ID}\t${ID}" >> "${HAPLOTYPES_FILE}"
 else
     singularity exec ${UTILS_SIF} python3 convert_to_haplotypes.py ${RABBIT_CSV} >> "${HAPLOTYPES_FILE}"
 fi

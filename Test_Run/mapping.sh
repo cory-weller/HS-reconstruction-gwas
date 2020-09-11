@@ -2,10 +2,7 @@
 # Run as: bash ./map.sh ${FILE_ID} ${REFGENOME_FILENAME} ${SORTED_VCF}
 # e.g.    bash ./map.sh 4CB-1-82_S82 dmel-all-chromosome-r5.57.fasta dgrp2.sorted.vcf
 
-UTILS_SIF="../utils.sif"
-HARP_SIF="../harp.sif"
-java8="/usr/lib/jvm/java-8-openjdk-amd64/bin/java" 
-# java11="/usr/lib/jvm/java-11-openjdk-amd64/bin/java" Equivalent to `java`
+source PARAMETERS.config
 
 FILE_ID=${1}
 REFGENOME_FILENAME=${2}
