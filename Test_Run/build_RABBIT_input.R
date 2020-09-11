@@ -19,7 +19,7 @@ if(length(bed_files) > 1) {
 }
 
 # Import and format genotypes for founders for this chromosome
-vcf <- fread(file = paste(CHROMOSOME, ".RABBIT.vcf", sep=""),
+vcf <- fread(file = paste(CHROMOSOME, ".RABBIT.csv", sep=""),
               skip = "#CHROM",
               header = TRUE,
               showProgress = FALSE)
