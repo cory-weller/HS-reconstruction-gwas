@@ -142,37 +142,6 @@ for CHROMOSOME in ${CHROMOSOMES[@]}; do
     singularity exec ${UTILS_SIF} python3 generate_RABBIT_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 done
 
-# replaced with python function above
-# for CHROMOSOME in ${CHROMOSOMES[@]}; do
-# if [ ! -f ${CHROMOSOME}.RABBIT.vcf ]; then
-# singularity exec ${UTILS_SIF} Rscript - ${VCF%.vcf}.sorted.noIndel.noRep.vcf ${CHROMOSOME} <<EOF
-#     args <- commandArgs(trailingOnly=TRUE)
-#     vcf_filename <- args[1]
-#     chromosome <- args[2]
-
-#     library(data.table)
-#     vcf <- fread(input = vcf_filename, skip="#CHROM", na.strings= "./." )
-#     setkey(vcf, "#CHROM")
-#     founders <- colnames(vcf)[10:length(colnames(vcf))]
-#     vcf <- vcf[.(chromosome), c("#CHROM","POS",founders), with=F]
-
-#     if(any(vcf=="0/0") | any(vcf=="1/1")) {
-#         # Convert to factor with level 1 = "0/0", level 2 = "1/1"
-#         vcf[, (founders) := lapply(.SD, factor, levels=c("0/0","1/1")), .SDcols=founders]
-
-#         # Convert to numeric
-#         vcf[, (founders) := lapply(.SD, as.numeric), .SDcols=founders]
-
-#         # Subtract 1, such that "0/0" is now 0, "1/1" is now 1, missing is NA
-#         vcf[, (founders) := lapply(.SD, "-", 1), .SDcols=founders]
-
-#         fwrite(vcf, file=paste(chromosome, ".RABBIT.vcf" , sep=""), quote=FALSE, na="NA")
-#     }
-# EOF
-# fi
-# done
-
-# 
 
 # prepare heterozygous VCF file for ASEReadCounter
 for CHROMOSOME in ${CHROMOSOMES[@]}; do

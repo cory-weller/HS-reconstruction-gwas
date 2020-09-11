@@ -9,6 +9,10 @@ HARP_SIF=$(realpath ../harp.sif)
 TMP="/home/cory/tmpStorage"
 ORIG_DIR=$(pwd)
 
+HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMSOME}.haplotypes"
+RABBIT_CSV="${BAM_FILESTEM}.${CHROMSOME}.RABBIT.out.csv"
+
+
 RABBIT_MAX_FOUNDERS="16"
 RABBIT_MAX_SITES="5000"
 
@@ -150,4 +154,30 @@ EOF
     else
         echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m already exists"
     fi
+done
+
+
+
+if [ -f "${RABBIT_CSV}" ]; then
+    echo "${RABBIT_CSV}" already exists
+    echo skipping RABBIT for this individual
+    continue
+else
+    math -noprompt -script "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
+fi
+
+
+# Print haplotypes file header
+echo -e "chromosome\tstart\tstop\tpar1\tpar2" > "${HAPLOTYPES_FILE}"
+
+# if nonrecombinant (i.e. no rabbit-generated output, only manual output),
+# parse manual output to make nonrecombinant haplotype map file
+N_LINES=$(wc -l ${RABBIT_CSV} | awk '{print $1}')
+if [ "${N_LINES}" == 1 ]; then
+    ID=$(awk '{print $3}' ${RABBIT_CSV})
+    echo -e "${CHROMOSOME}\t1\t25000000\t${ID}\t${ID}" >> "${HAPLOTYPES_FILE}"
+else
+    singularity exec ${UTILS_SIF} python3 convert_to_haplotypes.py ${RABBIT_CSV} >> "${HAPLOTYPES_FILE}"
+fi
+
 done
