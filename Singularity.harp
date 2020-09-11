@@ -45,7 +45,7 @@ IncludeCmd: yes
 
     # bcftools cleanup
     mv /opt/harp/src/samtools/bcftools /opt
-    
+    mkdir /sscratch/    
 %runscript
     exec python $@
 
