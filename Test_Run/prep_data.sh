@@ -121,9 +121,7 @@ singularity exec ${UTILS_SIF} java -Xmx4G -jar /opt/gatk4.jar SelectVariants \
 singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 
 # Generate HARP input haplotypes
-for CHROMOSOME in ${CHROMOSOMES[@]}; do
-    singularity exec ${UTILS_SIF} python3 generate_RABBIT_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
-done
+singularity exec ${UTILS_SIF} python3 generate_RABBIT_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf
 
 
 # prepare heterozygous VCF file for ASEReadCounter

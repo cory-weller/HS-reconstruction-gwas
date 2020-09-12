@@ -29,6 +29,7 @@ with open(sites_vcf, 'r') as infile:
             if previous_chromosome == 'BEGIN_FILE' :
                 previous_chromosome = chromosome
                 outfile = open('''%s.harp.csv''' % (chromosome), 'w')
+                print("Working on %s.harp.csv" % (chromosome))
                 header = ','.join([str(x) for x in ([chromosome, 'Ref'] + line_ids + ["Coverage"])]) + ',\n'
                 outfile.write(header)
             if previous_chromosome == chromosome:
@@ -39,6 +40,7 @@ with open(sites_vcf, 'r') as infile:
                 outfile.close()
                 previous_chromosome = chromosome
                 outfile = open('''%s.harp.csv''' % (chromosome), 'w')
+                print("Working on %s.harp.csv" % (chromosome))
                 header = ','.join([str(x) for x in ([chromosome, 'Ref'] + line_ids + ["Coverage"])]) + ',\n'
                 outfile.write(header)
     outfile.close()
