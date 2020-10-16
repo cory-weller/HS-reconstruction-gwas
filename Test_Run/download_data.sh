@@ -76,15 +76,21 @@ if [ ! -f ${VCF_ZIPPED} ]; then
         singularity exec ${UTILS_SIF} bgzip ${VCF}
     fi
 else
-    echo "Correct vcf exists and is bgzipped"
+    echo "Correct vcf exists and is bgzipped..."
 fi
 
 # Download repetitive region masking files
-mkdir -p tmp_repetitive/ && \
-wget ${REP_MASK_1}
-tar -zxvf chromOut.tar.gz -C tmp_repetitive/ && \
-rm chromOut.tar.gz
 
-wget ${REP_MASK_2}
-tar -zxvf chromTrf.tar.gz -C tmp_repetitive/ && \
-rm chromTrf.tar.gz
+if [ ! -f repetitive.list ]; then
+    mkdir -p tmp_repetitive/ && \
+    wget ${REP_MASK_1}
+    tar -zxvf chromOut.tar.gz -C tmp_repetitive/ && \
+    rm chromOut.tar.gz
+
+    wget ${REP_MASK_2}
+    tar -zxvf chromTrf.tar.gz -C tmp_repetitive/ && \
+    rm chromTrf.tar.gz
+else
+    echo "Repetitive masking file 'repetitive.list' already exists..."
+fi
+

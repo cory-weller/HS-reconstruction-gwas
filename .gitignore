@@ -19,3 +19,9 @@ Test_Run/*.readcounts
 Test_Run/*.bed
 Test_Run/*.in
 Test_Run/*.m
+Test_Run/*.haplotypes
+Test_Run/*.genotypes
+Test_Run/*.haplotypes.gz
+Test_Run/nohup.out
+Test_Run/comparison/*
+Test_Run/*.tar.gz

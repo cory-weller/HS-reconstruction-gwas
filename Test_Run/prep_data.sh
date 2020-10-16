@@ -8,22 +8,6 @@ fi
 source PARAMETERS.config
 
 
-if [ "${REFGENOME_URL: -3}" == ".gz" ]; then
-    REFGENOME_ZIPPED=$(basename "${REFGENOME_URL}")
-    REFGENOME="${REFGENOME_ZIPPED%.gz}"
-elif [ "${REFGENOME_URL: -6}" == ".fasta" ] || [ "${REFGENOME_URL: -3}" == ".fa" ]; then
-    REFGENOME=$(basename "${REFGENOME_URL}")
-fi
-
-if [ "${VCF_URL: -3}" == ".gz" ]; then
-    VCF_ZIPPED=$(basename "${VCF_URL}")
-    VCF="${VCF_ZIPPED%.gz}"
-elif [ "${VCF_URL: -4}" == ".vcf" ]; then
-    VCF=$(basename "${VCF_URL}")
-    VCF_ZIPPED="${VCF}.gz"
-fi
-
-
 # Create reference sequence dictionary
 if [ ! -f "${REFGENOME%.fasta}".dict ]; then
     echo "Building reference sequence dictionary"
@@ -66,29 +50,29 @@ if [ -f ${VCF_ZIPPED} ] && [ ! $(md5sum ${VCF_ZIPPED} | awk '{print $1}') == ${V
 fi
 
 # Sort VCF
-if [[ ! -f ${VCF_ZIPPED%.vcf.gz}.sorted.vcf ]]; then
+if [[ ! -f ${VCF_FILESTEM}.sorted.vcf ]]; then
     echo "Sorting VCF..."
     # dgrp2.sorted.vcf md5sum: dac0ddb8da32d9e4b68458b7aff28caf
     singularity exec ${UTILS_SIF} java -Xmx2G -jar /opt/gatk4.jar SortVcf \
             -I ${VCF_ZIPPED} \
-            -O ${VCF_ZIPPED%.vcf.gz}.sorted.vcf \
+            -O ${VCF_FILESTEM}.sorted.vcf \
             --SEQUENCE_DICTIONARY ${REFGENOME%.fasta}.dict \
             --MAX_RECORDS_IN_RAM 100000
     echo "BGZIP on sorted VCF..."
-    singularity exec ${UTILS_SIF} bgzip -f ${VCF_ZIPPED%.vcf.gz}.sorted.vcf
+    singularity exec ${UTILS_SIF} bgzip -f ${VCF_FILESTEM}.sorted.vcf
     # dgrp2.sorted.vcf.gz md5sum: e8364935cb63d5fc945a072321d8631c
 fi
 
 # Prepare VCF subset without indels
-singularity exec ${UTILS_SIF} awk -v file=${VCF_ZIPPED%.vcf.gz}.sorted.noIndel.vcf -F "\t" '{
+singularity exec ${UTILS_SIF} awk -v file=${VCF_FILESTEM}.sorted.noIndel.vcf -F "\t" '{
 if($0 ~ /^#/ || $3 ~ /_SNP/)
-        print >> file}' < <(zcat ${VCF_ZIPPED%.vcf.gz}.sorted.vcf.gz)
+        print >> file}' < <(zcat ${VCF_FILESTEM}.sorted.vcf.gz)
 
 
 # Prepare VCF subset with only indels
-singularity exec ${UTILS_SIF} awk -v file=${VCF_ZIPPED%.vcf.gz}.sorted.indel.vcf -F "\t" '{
+singularity exec ${UTILS_SIF} awk -v file=${VCF_FILESTEM}.sorted.indel.vcf -F "\t" '{
 if($0 ~ /^#/ || $3 ~ /_DEL/ || $3 ~ /_INS/)
-        print >> file}' < <(zcat ${VCF_ZIPPED%.vcf.gz}.sorted.vcf.gz)
+        print >> file}' < <(zcat ${VCF_FILESTEM}.sorted.vcf.gz)
 
 
 # dgrp2.sorted.indel.vcf md5: 0fe9296e7c1681697492c9175a43986f
@@ -116,6 +100,11 @@ singularity exec ${UTILS_SIF} java -Xmx4G -jar /opt/gatk4.jar SelectVariants \
     --variant    ${VCF%.vcf}.sorted.noIndel.vcf \
     --exclude-intervals repetitive.list \
     --output ${VCF%.vcf}.sorted.noIndel.noRep.vcf
+
+# Generate haplotypes file for tabix
+    singularity exec ${UTILS_SIF} bgzip -f ${VCF_FILESTEM}.haplotypes.vcf
+    singularity exec ${UTILS_SIF} tabix -p vcf ${VCF_FILESTEM}.haplotypes.vcf.gz
+
 
 # Generate HARP genotype csv files
 singularity exec ${UTILS_SIF} python3 generate_harp_csv.py ${VCF%.vcf}.sorted.noIndel.noRep.vcf

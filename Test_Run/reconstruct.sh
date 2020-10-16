@@ -2,10 +2,25 @@
 
 source PARAMETERS.config
 
-BAM_FILESTEM=${1%.final.bam}
-BAM_FULLPATH="$(pwd)/${1}"
+if [ -z $SLURM_ARRAY_TASK_ID ]; then
+    # if NOT a job array
+    BAM_FILENAME=${1}
+else
+    # else, single reconstruct with given final.bam file
+    BAM_FILENAME=$(sed -n "${SLURM_ARRAY_TASK_ID}"p bamlist.txt | awk '{print $1}')
+fi
+
+BAM_FILESTEM=${BAM_FILENAME%.final.bam}
+BAM_FULLPATH="$(pwd)/${BAM_FILENAME}"
 
 REFGENOME_FULLPATH="$(pwd)/${REFGENOME}"
+
+if [ -f "${BAM_FILESTEM}.estimate.genotypes.gz" ]; then
+    echo "Final output ${BAM_FILESTEM}.estimate.genotypes.gz already exists. Skipping individual..."
+    exit 0 
+fi
+
+module load mathematica
 
 # Read chromosome lengths into associative array from lenghts.txt
 declare -A LENGTHS
@@ -66,11 +81,20 @@ function getHarpFreqs {
 
 export -f getHarpFreqs
 
+# Set up associative array of lineID : column, to be used by TABIX
+vals=($(zgrep -m 1 "^#CHROM" ${VCF_FILESTEM}.haplotypes.vcf.gz | xargs | cut -f 10-))
+declare -A founderIndices
+
+for i in $(seq 0 "${#vals[@]}"); do
+    let j=$i+1
+    founderIndices[[${vals[$i]}]]=$j
+done
+
 # Iterate through chromosomes with extant *.harp.csv file
 for CHROMOSOME in ${!LENGTHS[@]}; do
-     cd ${ORIG_DIR}
+    cd ${ORIG_DIR}
     CHROMOSOME_LENGTH=${LENGTHS[${CHROMOSOME}]}
-    HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMOSOME}.haplotypes"
+    HAPLOTYPES_FILE="${BAM_FILESTEM}.${CHROMOSOME}.estimate.haplotypes"
     RABBIT_CSV="${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.csv"
 
     # Get HARP freqs
@@ -147,26 +171,52 @@ EOF
         echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m already exists"
     fi
 
-if [ -f "${HAPLOTYPES_FILE}" ]; then
-    echo "${HAPLOTYPES_FILE}" already exists
-    echo skipping RABBIT for this individual
-else
-    echo "running mathematica"
-    math -noprompt -script "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
-fi
+    # Run RABBIT if output does not exist
+    if [ ! -f "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.csv" ]; then
+        echo "running mathematica"
+        math -noprompt -script "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.m"
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.csv already exists"
+    fi
 
+    # Convert RABBIT Viterbi path to haplotypes
+    if [ ! -f "${HAPLOTYPES_FILE}" ]; then
+        echo -e "chromosome\tstart\tstop\tpar1\tpar2" > "${HAPLOTYPES_FILE}"
+    else
+        echo "${HAPLOTYPES_FILE} already exists"
+    fi
 
-# Print haplotypes file header
-echo -e "chromosome\tstart\tstop\tpar1\tpar2" > "${HAPLOTYPES_FILE}"
+    N_LINES=$(wc -l ${RABBIT_CSV} | awk '{print $1}')
 
-# if nonrecombinant (i.e. no rabbit-generated output, only manual output),
-# parse manual output to make nonrecombinant haplotype map file
-N_LINES=$(wc -l ${RABBIT_CSV} | awk '{print $1}')
-if [ "${N_LINES}" == 1 ]; then
-    ID=$(awk '{print $3}' ${RABBIT_CSV})
-    echo -e "${CHROMOSOME}\t1\t${CHROMOSOME_LENGTH}\t${ID}\t${ID}" >> "${HAPLOTYPES_FILE}"
-else
-    singularity exec ${UTILS_SIF} python3 convert_to_haplotypes.py ${RABBIT_CSV} >> "${HAPLOTYPES_FILE}"
-fi
+    if [ "${N_LINES}" == 1 ]; then
+        ID=$(awk '{print $3}' ${RABBIT_CSV})
+        echo -e "${CHROMOSOME}\t1\t${CHROMOSOME_LENGTH}\t${ID}\t${ID}" >> "${HAPLOTYPES_FILE}"
+    else
+        singularity exec ${UTILS_SIF} python3 convert_to_haplotypes.py ${RABBIT_CSV} >> "${HAPLOTYPES_FILE}"
+    fi
+
+    # Convert haplotypes to genotypes
+    if [ ! -f ${BAM_FILESTEM}.${CHROMOSOME}.estimate.genotypes ]; then
+        echo "Generating ${BAM_FILESTEM}.${CHROMOSOME}.estimate.genotypes"
+        while read chromosomeN start stop par1 par2; do
+            col1=${founderIndices[[$par1]]}
+            col2=${founderIndices[[$par2]]}
+            singularity exec ${UTILS_SIF} tabix ${VCF_FILESTEM}.haplotypes.vcf.gz ${chromosomeN}:${start}-${stop} | awk -v col1=$col1 -v col2=$col2 '{print $1,$2,$col1,$col2}' >> ${BAM_FILESTEM}.${CHROMOSOME}.estimate.genotypes
+        done < <(awk 'NR > 1 {print}' ${HAPLOTYPES_FILE})
+    else
+        echo "${BAM_FILESTEM}.${CHROMOSOME}.estimate.genotypes already exists"
+    fi
+
+    [ -e ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.txt ] && rm ${BAM_FILESTEM}.${CHROMOSOME}.RABBIT.out.txt
 
 done
+
+# Combine genotype estimates into one file
+echo "Concatenating genotypes as ${BAM_FILESTEM}.estimate.genotypes.gz"
+cat ${BAM_FILESTEM}.*.estimate.genotypes > ${BAM_FILESTEM}.estimate.genotypes && \
+rm ${BAM_FILESTEM}.*.estimate.genotypes
+
+ls ${BAM_FILESTEM}{\.,_}* | tar -czv -f ${BAM_FILESTEM}.tar.gz --remove-files --files-from -
+
+
+
