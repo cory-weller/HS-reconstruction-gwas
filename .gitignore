@@ -25,3 +25,4 @@ Test_Run/*.haplotypes.gz
 Test_Run/nohup.out
 Test_Run/comparison/*
 Test_Run/*.tar.gz
+Test_Run/siteFreqs.tab
