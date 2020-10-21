@@ -19,7 +19,11 @@ tar -zxvf ../4CB-1-82_S82.tar.gz  && mv 4CB-1-82_S82.estimate.genotypes 82.estim
 library(data.table)
 library(foreach)
 library(ggplot2)
+library(ggrepel)
+library(ggthemes)
 
+VCF_filename <- "../dgrp2.haplotypes.vcf.gz"
+siteFreqs_filename <- "../siteFreqs.tab"
 
 extractRegions <- function(sites, haplotypes) {
     foreach(i=1:nrow(haplotypes), .combine="rbind") %do% {
@@ -32,6 +36,21 @@ chromosomes <- c("2L","2R","3L","3R","X")
 getHaplotypes <- function(ind, chromosome) {
     fread(paste(ind, ".", chromosome, ".estimate.haplotypes", sep=""))
 }
+
+importVCF <- function(VCF_filename) {
+    VCF_filename_split <- strsplit(VCF_filename, "\\.")[[1]]
+    VCF_extension <- VCF_filename_split[length(VCF_filename_split)]
+    if(VCF_extension == "vcf") {
+        VCF <- fread(VCF_filename)
+    } else if(VCF_extension == "gz") {
+        VCF <- fread(cmd = paste("zcat", VCF_filename))
+    }
+    return(VCF)
+}
+
+siteFreqs <- fread(siteFreqs_filename, col.names=c("contig", "position", "popRefCount", "popAltCount"))
+setkey(siteFreqs, "contig", "position")
+
 
 o <- foreach( ind = c(73, 77, 78, 79, 81, 82), .combine="rbind" ) %do% {
     haplotypes <- foreach(chromosome = chromosomes, .combine="rbind") %do% {
@@ -51,8 +70,10 @@ o <- foreach( ind = c(73, 77, 78, 79, 81, 82), .combine="rbind" ) %do% {
     highcov <- highcov[!duplicated(highcov)]
 
     dat <- merge(lowcov,highcov)
+    dat <- merge(dat, siteFreqs)
     dat[, "ind" := ind ]
     dat <- merge(dat, haplotypes)
+
     
 
     # filter out sites with unrecognized bases or improper pairs
@@ -69,21 +90,32 @@ o <- foreach( ind = c(73, 77, 78, 79, 81, 82), .combine="rbind" ) %do% {
     dat[refCount == 0 & altCount >= 6, trueGenotype := "HomAlt"]
     dat[refCount >= 3 & altCount >= 3 , trueGenotype := "Het"]
     dat <- dat[!is.na(trueGenotype) & ! is.na(estGenotype)]
+    return(dat)
+    #out <- dat[, list("N_Sites"=.N, "accurate_sites"=sum(estGenotype==trueGenotype)), by=list(contig, ind, n_recomb)]
+    #out[, acc := accurate_sites / N_Sites ]
 
-    out <- dat[, list("N_Sites"=.N, "accurate_sites"=sum(estGenotype==trueGenotype)), by=list(contig, ind, n_recomb)]
-    out[, acc := accurate_sites / N_Sites ]
-
-    return(out)
+    #return(out)
 }
 
-o[,ind := factor(ind)]
+o[, refFreq := popRefCount / (popRefCount + popAltCount)]
+o[, altFreq := popAltCount / (popRefCount + popAltCount)]
+o[, idx := 1:.N]
+o[, MAF := min(refFreq, altFreq), by = idx]
+o[, MAF_grp := cut(MAF, breaks=c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.5, Inf))]
 
-ggplot(o, aes(x=n_recomb, y=acc, color=contig, shape=ind)) + geom_point()
+dat <- o[, list("N_Sites"=.N, "accurate_sites"=sum(estGenotype==trueGenotype)), by=list(contig, n_recomb, ind)]
+dat[, acc := accurate_sites / N_Sites]
+dat[, ind := factor(ind)]
 
-ggplot(o, aes(x=n_recomb, y=acc, color=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
+ggplot(dat, aes(x=n_recomb, y=acc, color=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
 theme_few(12) + 
 labs(x="Estimated number of recombination events", y="Genotype Concordance (0.05X Estimate and 5X Genotype Call)", color="Individual") +
 theme(legend.position = "none")
+
+ggplot(dat, aes(x=n_recomb, y=acc, color=ind))) + facet_grid(trueGenotype~.) + geom_jitter()
+
+
+## Chromosome Paintings
 
 haplotype_files <- list.files(pattern="*.estimate.haplotypes")
 

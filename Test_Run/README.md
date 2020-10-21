@@ -22,4 +22,8 @@ source PARAMETERS.config && sbatch ${SLURM_OPTS} ./reconstruct.sh FILENAME.final
 
 # or run one job locally
 ./reconstruct.sh FILENAME.final.bam
+
+
+# calculate site frequency data from supplied vcf gzfile
+./getSiteFrequencies.py dgrp2.haplotypes.vcf > siteFreqs.tab
 ```
