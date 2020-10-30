@@ -9,15 +9,29 @@ setwd("/scratch/caw5cv/genome-reconstruction-revision/05_GWAS/data")
 
 populations <- c("RILs_8_F50", "outbred_128_F50", "hybrid_swarm_128_F5", "hybrid_swarm_32_F5", "hybrid_swarm_128_F0")
 
+# population <- "RILs_8_F50"
+# iteration
 
 
 getManhattan <- function(population, iteration, PVE, replicate, nLoci) {
     zipFilename <- paste(population, "_", iteration, "_", nLoci, "_", PVE, ".zip", sep="")
     causativeLociFilename <-  paste(replicate, ".causative.txt", sep="")
     freqsFilename <- paste(replicate, ".freqs.txt", sep="")
-    freqs <- fread(cmd = paste("unzip -p ", zipFilename, " ", freqsFilename, sep=""))
-    #freqs <- freqs[case.Ref + control.Ref > 100 & case.Alt + control.Alt > 100]
-    #return(freqs)
+    freqs <- fread(cmd = paste("unzip -p ", zipFilename, " ", freqsFilename, sep=""), colClasses=c(POS="numeric",case.Ref="numeric",case.Alt="numeric",control.Ref="numeric",control.Alt="numeric"))
+    freqs[, chisq := NULL]
+    freqs[, P := NULL]
+    freqs[, chisq := (((case.Ref)+(control.Ref)+((case.Alt))+((control.Alt))) * (((control.Ref)*(case.Alt)) - ((case.Ref)*(control.Alt)))**2) / (((case.Ref)+(control.Ref)) * (((case.Ref)+(case.Alt))) * ((control.Ref)+(control.Alt)) * (((case.Alt))+(control.Alt)))]
+    freqs[, ref := case.Ref + control.Ref]
+    freqs[, alt := case.Alt + control.Alt]
+    freqs[, tot := ref + alt ]
+    freqs[, MAF := min(ref, alt)/tot, by=POS]
+    freqs <- freqs[MAF >= 0.05]
+    if(grepl("^RIL", population) == TRUE | grepl("F0$", population) == TRUE) {
+        freqs[, chisq := chisq / 2]
+        freqs[, halved := TRUE]
+    }
+    freqs[,P := pchisq(chisq, 1, lower.tail=FALSE)]
+
     causativeLoci <- fread(cmd = paste("unzip -p ", zipFilename, " ", causativeLociFilename, sep=""))
     return(ggplot(freqs[P < 1], aes(x=POS, y = -1 * log10(P))) + geom_point(shape=21, alpha=0.5) + geom_vline(xintercept = causativeLoci$POS, color="red"))
 }
