@@ -97,6 +97,7 @@ o <- foreach( ind = c(73, 77, 78, 79, 81, 82), .combine="rbind" ) %do% {
     #return(out)
 }
 
+
 o[, refFreq := popRefCount / (popRefCount + popAltCount)]
 o[, altFreq := popAltCount / (popRefCount + popAltCount)]
 o[, idx := 1:.N]
@@ -107,10 +108,12 @@ dat <- o[, list("N_Sites"=.N, "accurate_sites"=sum(estGenotype==trueGenotype)), 
 dat[, acc := accurate_sites / N_Sites]
 dat[, ind := factor(ind)]
 
-ggplot(dat, aes(x=n_recomb, y=acc, color=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
+g <- ggplot(dat, aes(x=n_recomb, y=acc, color=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
 theme_few(12) + 
-labs(x="Estimated number of recombination events", y="Genotype Concordance (0.05X Estimate and 5X Genotype Call)", color="Individual") +
+labs(x="Estimated number of recombination events", y="Genotype estimate concordance", color="Individual") +
 theme(legend.position = "none")
+
+ggsave(g, file="concordance.svg", height=10, width=15, units="cm")
 
 ggplot(dat, aes(x=n_recomb, y=acc, color=ind))) + facet_grid(trueGenotype~.) + geom_jitter()
 

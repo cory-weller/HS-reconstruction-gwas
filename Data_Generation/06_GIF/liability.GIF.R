@@ -1,14 +1,16 @@
 #!/usr/bin/env Rscript
 
+# Before running, load tabix module!
+
 library(data.table)
 library(ggplot2)
 library(ggthemes)
 library(foreach)
 library(doMC)
-registerDoMC(cores=3)
+registerDoMC(cores=5)
 # args <- c("outbred_128_F0", 1, 1, 0.4)
 # args <- c("RILs_32_F50", 1, 1, 0.2)
-# args <- c("hybrid_swarm_128_F0", 1, 10, 0.2)
+# args <- c("hybrid_swarm_128_F0", 1, 1, 0.2 0)
 # args <- c("hybrid_swarm_128_F5", 1, 1, 0.2)
 args <- commandArgs(trailingOnly=TRUE)
 population <- args[1]
@@ -17,6 +19,10 @@ innerReplicates <- 10
 n_loci_subset <- as.numeric(args[3])
 effect_size <- as.numeric(args[4])
 slurm_array_id <- as.numeric(args[5])
+maf_min_filter <- as.numeric(args[6])
+# anything below maf_min_filter will be filtered out
+
+chromosomes <- c("2L","2R","3L","3R")
 
 nFoundersSplit <- unlist(strsplit(unlist(strsplit(population, split="_F"))[1], split="_"))
 nFounders <- as.numeric(nFoundersSplit[length(nFoundersSplit)])
@@ -41,17 +47,19 @@ if(RIL == TRUE) {
   inbred <- TRUE
 }
 
-source("../liability.functions.R")
+source("liability.functions.R")
 
-#all_sites <- make_sites_vcf_file(autosomes)
-all_sites <- make_sites_vcf_file("2L")
+# Collect site chromosome and position info
+all_sites <- make_sites_vcf_file("../03_STITCH_reconstruction/2L.sites")
 n_loci <- 1000
 
-# get total list of sites
+# Subsample `n_loci` sites
 sites <- all_sites[sample(.N, size=n_loci, replace=FALSE)][,c("CHROM","POS")]
 
-# retrieve tabix info from sites
-causative <- tabix_read(sites)
+
+# retrieve tabix info specific to these `n_loci` sites for putatively causative alleles
+vcf_filename <- "../../Test_Run/dgrp2.sorted.noIndel.noRep.vcf.gz"
+causative <- tabix_read(sites, vcf_filename)
 setnames(causative, "#CHROM", "CHROM")
 
 
@@ -59,10 +67,10 @@ setnames(causative, "#CHROM", "CHROM")
 # From here, get individual haplotype maps and convert to risk, then assign to case/control
 
 if(inbred == FALSE | RIL == TRUE) {
-  haps <- load_haplotypes(population, RIL, c("2L","2R","3L","3R"))
+  haps <- load_haplotypes(population, RIL, chromosomes)
   origFounderIDs <- readLines(paste("../../01_forward_simulator/", population, ".founders", sep=""))
 } else if(inbred == TRUE & RIL == FALSE) {
-  founding_lines <- readLines("../../01_forward_simulator/lines.txt")
+  founding_lines <- readLines("../01_forward_simulator/lines.txt")
   origFounderIDs <- sample(founding_lines, size=nFounders, replace=FALSE)
   tmp <- data.table("start"= "1" ,
                       "stop"= "25000000" ,
@@ -83,10 +91,11 @@ if(RIL==TRUE) {
 inds <- sample(unique(haps[,ind]), size=5000, replace=TRUE)
 }
 
-vcf <- load_VCF(c("2L","2R","3L","3R"))
+vcf <- load_VCF(chromosomes, vcf_filename)
+vcf <- polarizeVCF(vcf)
 setkey(vcf, CHROM)
 
-allFounderIDs <- colnames(causative)[colnames(causative) %like%  "RAL"]
+allFounderIDs <- colnames(causative)[colnames(causative) %like%  "line_"]
 
 replicate <- 0
 while(replicate < replicates) {
@@ -101,8 +110,8 @@ used_founders <- unique(c(permuted_haplotypes[,par1], permuted_haplotypes[,par2]
 causative_subset <- causative[, c("CHROM","POS",used_founders), with=FALSE]
 
 # calculate allele freqs
-causative_subset[, nRef := apply(.SD, 1, function(x) sum(x=="0/0", na.rm=TRUE)), .SDcols=colnames(causative_subset)[colnames(causative_subset) %like% "RAL"] ]
-causative_subset[, nAlt := apply(.SD, 1, function(x) sum(x=="1/1", na.rm=TRUE)), .SDcols=colnames(causative_subset)[colnames(causative_subset) %like% "RAL"] ]
+causative_subset[, nRef := apply(.SD, 1, function(x) sum(x=="0/0", na.rm=TRUE)), .SDcols=colnames(causative_subset)[colnames(causative_subset) %like% "line_"] ]
+causative_subset[, nAlt := apply(.SD, 1, function(x) sum(x=="1/1", na.rm=TRUE)), .SDcols=colnames(causative_subset)[colnames(causative_subset) %like% "line_"] ]
 causative_subset[, nTot := nRef + nAlt]
 causative_subset[, refFreq := nRef/nTot]
 causative_subset[, altFreq := nAlt/nTot]
@@ -147,7 +156,7 @@ while(innerReplicate < innerReplicates) {
     chosen <- chosen[sample(.N, size=5000, replace=FALSE)]
 }
 
-  freqs <- foreach(chr.i=c("2L","2R","3L","3R")) %do% {
+  freqs <- foreach(chr.i=chromosomes) %do% {
     cat(paste("starting chromosome ", chr.i, "\n", sep=""))
     cat("working on case population freqs\n")
     caseFreqs <- calcFreqs(permuted_haplotypes[.(chosen[group=="case",ind_n]), allow.cartesian=TRUE][chromosome==chr.i], vcf[.(chr.i)])
@@ -162,6 +171,15 @@ while(innerReplicate < innerReplicates) {
 
     # Exclude rows that contain any zeros, which produce NaN in chisq test
     freqs.merge <- merge(caseFreqs, controlFreqs)[case.Ref != 0 & case.Alt != 0 & control.Ref != 0 & control.Alt != 0]
+    freqs.merge[, refCount := (case.Ref + control.Ref)]
+    freqs.merge[, altCount := (case.Alt + control.Alt)]
+    freqs.merge[, totalCount := refCount + altCount]
+    freqs.merge[, refFreq := refCount / totalCount]
+    freqs.merge[, altFreq := altCount / totalCount]
+    freqs.merge[, idx := 1:.N]
+    freqs.merge[, MAF := min(refFreq, altFreq), by=idx]
+    freqs.merge <- freqs.merge[MAF > maf_min_filter]
+
     rm(caseFreqs)
     rm(controlFreqs)
     gc()
@@ -171,7 +189,7 @@ while(innerReplicate < innerReplicates) {
       # perform correction for sample size of homozygote allele draws
       freqs.merge[, chisq := chisq/2]
     }
-    freqs.merge[, c("case.Ref","case.Alt","control.Ref","control.Alt") := NULL]
+    freqs.merge[, c("case.Ref","case.Alt","control.Ref","control.Alt", "refCount", "altCount", "totalCount", "refFreq", "altFreq", "idx", "MAF") := NULL]
     return(freqs.merge)
   }
 
@@ -212,7 +230,13 @@ while(innerReplicate < innerReplicates) {
           "sumEffect" = sum(causative_subset_2[,effect])
           )
 
-  fwrite(gifOUT, file=paste(population, "_", n_loci_subset, "_", effect_size, ".out", sep=""), append=TRUE, col.names=FALSE, row.names=FALSE, sep="\t", quote=FALSE)
+  fwrite(gifOUT, file=paste(population, "_", 
+                            n_loci_subset, "_", 
+                            effect_size, 
+                            "_MAF_", maf_min_filter, 
+                            ".out", 
+                            sep=""), 
+          append=TRUE, col.names=FALSE, row.names=FALSE, sep="\t", quote=FALSE)
   rm(caseFreqs)
   rm(controlFreqs)
   rm(chosen)

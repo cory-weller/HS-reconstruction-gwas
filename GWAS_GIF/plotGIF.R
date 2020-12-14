@@ -26,6 +26,17 @@ if(file.exists("GIF.tab")) {
   fwrite(dat, file="GIF.tab", quote=F, row.names=F, col.names=T, sep="\t")
 }
 
+dat.filtered <- fread("hybrid_swarm_128_F0_1_0.4_MAF_0.05.out")
+setnames(dat.filtered, c( "slurm_iteration",
+                            "permutation_iteration",
+                            "causal_iteration", 
+                            "GIF_all", 
+                            "GIF_unlinked", 
+                            "GIF_linked", 
+                            "sum_effect"
+                          )
+)
+
 dat[fn %like% "hybrid_swarm", population := "hybrid_swarm"]
 
 dat[fn %like% "hybrid_swarm", c("n_founders","n_generations","n_loci","effect") := tstrsplit(fn, split="_")[-c(1,2)]]
@@ -37,7 +48,18 @@ dat[, label := paste(population, n_founders, n_generations, sep="_")]
 dat[, fn := NULL]
 
 dat.long <- melt(dat, measure.vars=c("GIF_all","GIF_unlinked","GIF_linked"), variable.name="GIF_type", value.name="GIF")
+dat.filtered.long <- melt(dat.filtered, measure.vars=c("GIF_all","GIF_unlinked","GIF_linked"), variable.name="GIF_type", value.name="GIF")
 
+dat.tmp <- copy(dat.long[n_generations=="F0"][effect == 0.4][n_loci == 1][n_founders == 128])
+dat.tmp[, c('n_founders', 'n_generations', 'n_loci', 'effect', 'label', 'population') := NULL]
+dat.tmp[, "MAF Filter" := "None"]
+dat.filtered.long[, "MAF Filter" := "5%"]
+dat.merge <- rbindlist(list(dat.tmp, dat.filtered.long))
+dat.merge[, GIF_type_label := factor()]
+dat.merge[GIF_type=="GIF_all", GIF_type_label := "Genome-Wide"]
+dat.merge[GIF_type=="GIF_linked", GIF_type_label := "Linked Loci"]
+dat.merge[GIF_type=="GIF_unlinked", GIF_type_label := "Unlinked Loci"]
+ggplot(dat.merge, aes(x=GIF_type_label, y=GIF, color=`MAF Filter`)) + geom_boxplot() + labs(x="")
 
 
 dat.long[, label := factor(label, levels=

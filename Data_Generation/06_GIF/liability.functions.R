@@ -12,11 +12,12 @@ sle <- function(AF, effect_size) {
   rnorm(1, mean=midpoint, sd=0.005)
 }
 
-tabix_read <- function(DT) {
+tabix_read <- function(DT, vcf_filename) {
   # input of data.table with columns CHR and POS
   o <- foreach(CHR = DT[[1]], POS=DT[[2]]) %do% {
-      tabix_cmd <- paste("tabix -h ../../input_data/haplotypes.vcf.gz ", CHR, ":", POS, "-", POS, sep="")
-      dat <- fread(cmd=tabix_cmd, sep="\t")
+      tabix_cmd <- paste("tabix -h ", vcf_filename, " ", CHR, ":", POS, "-", POS, sep="")
+      #print(tabix_cmd)
+      dat <- fread(cmd=tabix_cmd, sep="\t", skip="#CHROM")
       return(dat)
   }
   return(rbindlist(o))
@@ -61,8 +62,8 @@ convert_to_wide <- function(DT) {
 }
 
 load_haplotypes <- function(population, RIL, chromosomes) {
-  haplotypes_file <- paste("../../01_forward_simulator/", population, ".haps", sep="")
-  haplotypes_file_wide <- paste("../haplotypes/", population, ".haps.wide", sep="")
+  haplotypes_file <- paste(population, ".haps", sep="")
+  haplotypes_file_wide <- paste(population, ".haps.wide", sep="")
   if(! file.exists(haplotypes_file_wide)) {
     # generate haplotypes file
     cat(paste("building wide haplotypes file for population ", population, "...\n", sep=""))
@@ -103,8 +104,9 @@ load_haplotypes <- function(population, RIL, chromosomes) {
   }
 }
 
-load_VCF <- function(chromosomes) {
-  vcf <- fread(cmd="zcat ../../input_data/haplotypes.polarized.vcf.gz", skip="CHROM")
+load_VCF <- function(chromosomes, vcf_filename) {
+  vcf <- fread(cmd=paste("zcat ", vcf_filename, sep=""), skip="#CHROM")
+  setnames(vcf, "#CHROM", "CHROM")
   return(vcf[CHROM %in% chromosomes])
 }
 
@@ -119,9 +121,9 @@ load_VCF <- function(chromosomes) {
 
 #autosomes <- c("2L","2R","3L","3R")
 
-make_sites_vcf_file <- function(chromosomes) {
-  o <- foreach(chr = chromosomes) %do% {
-    fread(paste("../../input_data/", chr, ".sites", sep=""), header=F, select=c(1,2), col.names=c("CHROM","POS"))
+make_sites_vcf_file <- function(filenames) {
+  o <- foreach(filename = filenames) %do% {
+    fread(filename, header=F, select=c(1,2), col.names=c("CHROM","POS"))
   }
   return(rbindlist(o)[])
 }
@@ -235,3 +237,38 @@ get.lambdaGC1000 <- function(chisq.array, N_case_individuals, N_control_individu
     lambda.1000 <- 1 + (unadjusted.lambda-1) * (1/N_case_individuals + 1/N_control_individuals)/(1/1000 + 1/1000)
         return(lambda.1000)
 }
+
+
+polarizeVCF <- function(DT) {
+    # Polarizes a VCF data.table to -1 for alt and +1 for ref allele
+    # save column names of lineIDs for subset with .SD
+    cols <- colnames(DT)[10:ncol(DT)]
+
+    # If in "0/0" format instead of "0" format; convert "0/0" to "0" and "1/1" to "1"
+    if (any("1/1" == DT[,10:length(colnames(DT)), with=FALSE])) {
+        # convert to factor, then to numeric, such that "0/0" is now 1, "1/1" is now 3
+        DT[, (cols) := lapply(.SD, factor, levels=c("0/0","padding","1/1")), .SDcols=cols]
+        DT[, (cols) := lapply(.SD, as.numeric), .SDcols=cols]
+
+        # some arithmetic such that 1 stays 1, and 3 is now -1
+        DT[, (cols) := lapply(.SD, function(x) ((x*-1)+2)), .SDcols=cols]
+	} else if (any(2 == DT[,10:length(colnames(DT)), with=FALSE])) {
+		DT[, (cols) := lapply(.SD, function(x) ((x-1)*-1)), .SDcols=cols][]
+	} else if (any(1 == DT[,10:length(colnames(DT)), with=FALSE])) {
+        # some arithmetic such that 0 is now 1, and 1 is now -1
+		DT[, (cols) := lapply(.SD, function(x) ((x*-2)+1)), .SDcols=cols][]
+    }
+
+	    # convert any NA values to 0
+    for (j in cols) {
+        set(DT, which(is.na(DT[[j]])), j, 0)
+    }
+
+    # convert anything else to 0
+    for (j in cols) {
+        set(DT, which(! DT[[j]] %in% c(-1, 0, 1)), j, 0)
+    }
+
+    invisible(DT[])
+}
+
