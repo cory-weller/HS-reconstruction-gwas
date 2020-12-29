@@ -108,7 +108,9 @@ dat <- o[, list("N_Sites"=.N, "accurate_sites"=sum(estGenotype==trueGenotype)), 
 dat[, acc := accurate_sites / N_Sites]
 dat[, ind := factor(ind)]
 
-g <- ggplot(dat, aes(x=n_recomb, y=acc, color=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
+fwrite(dat, file="reconstruction_comparison.tab", quote=F, row.names=F, col.names=T, sep="\t")
+
+g <- ggplot(dat, aes(x=n_recomb, y=acc, shape=ind)) + geom_point() + geom_text_repel(aes(label=contig)) + geom_vline(xintercept=10, linetype="dashed") +
 theme_few(12) + 
 labs(x="Estimated number of recombination events", y="Genotype estimate concordance", color="Individual") +
 theme(legend.position = "none")
