@@ -6,9 +6,7 @@
 #SBATCH -p standard
 #SBATCH --account berglandlab
 
-module load gcc
-module load openmpi
-module load R/3.5.1
+module load gcc/7.1.0 openmpi/3.1.4 intel/18.0 intelmpi/18.0 R/3.6.3
 module load tabix
 
 slurm_array_id=${SLURM_ARRAY_TASK_ID}
