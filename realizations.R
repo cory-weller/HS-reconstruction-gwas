@@ -32,7 +32,7 @@ getManhattan <- function(population, iteration, PVE, replicate, nLoci) {
     freqs[,P := pchisq(chisq, 1, lower.tail=FALSE)]
 
     causativeLoci <- fread(cmd = paste("unzip -p ", zipFilename, " ", causativeLociFilename, sep=""))
-    return(ggplot(freqs[P < 1], aes(x=POS, y = -1 * log10(P))) + geom_point(shape=21, alpha=0.5) + geom_vline(xintercept = causativeLoci$POS, color="red"))
+    return(ggplot(freqs[P < 1], aes(x=POS/1e6, y = -1 * log10(P))) + geom_point(shape=21, alpha=0.5) + geom_vline(xintercept = causativeLoci$POS/1e6, color="red") + ylab(expression(-Log[10](p))))
 }
 
 
@@ -85,7 +85,7 @@ g1 <- getManhattan( population = "RILs_8_F50",
                     replicate = 6, 
                     nLoci = 1) +
         mytheme +
-        labs(x="RILs")
+        xlab("RILs")
 
 
 g2 <- getManhattan( population = "hybrid_swarm_128_F0", 
