@@ -4,6 +4,12 @@ library(data.table)
 library(ggplot2)
 library(foreach)
 library(ggthemes)
+  
+quantiles_95 <- function(x) {
+  r <- quantile(x, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
 
 if(file.exists("GIF.tab")) {
  dat <- fread("GIF.tab")
@@ -26,7 +32,7 @@ if(file.exists("GIF.tab")) {
   fwrite(dat, file="GIF.tab", quote=F, row.names=F, col.names=T, sep="\t")
 }
 
-dat.filtered <- fread("hybrid_swarm_128_F0_1_0.4_MAF_0.05.out")
+dat.filtered <- fread("GIF.filtered_05.tab")
 setnames(dat.filtered, c( "slurm_iteration",
                             "permutation_iteration",
                             "causal_iteration", 
@@ -59,7 +65,22 @@ dat.merge[, GIF_type_label := factor()]
 dat.merge[GIF_type=="GIF_all", GIF_type_label := "Genome-Wide"]
 dat.merge[GIF_type=="GIF_linked", GIF_type_label := "Linked Loci"]
 dat.merge[GIF_type=="GIF_unlinked", GIF_type_label := "Unlinked Loci"]
-ggplot(dat.merge, aes(x=GIF_type_label, y=GIF, color=`MAF Filter`)) + geom_boxplot() + labs(x="")
+
+ggplot(dat.merge, aes(x=GIF_type_label, y=GIF, color=`MAF Filter`)) +
+stat_summary(fun.data = quantiles_95, geom="boxplot", position=position_dodge(1)) +
+labs(x="")
+
+g.filter_compare <- ggplot(dat.merge, aes(x=1, y=GIF, color=`MAF Filter`)) +
+stat_summary(fun.data = quantiles_95, geom="boxplot", position=position_dodge(1)) +
+labs(x="") +
+facet_grid(.~GIF_type_label) +
+theme_few(10) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+ggsave(g.filter_compare, file="MAF_filter.png", width=15, height=15, units="cm")
+
 
 
 dat.long[, label := factor(label, levels=
@@ -97,12 +118,7 @@ dat.long[GIF_type=="GIF_linked", GIF_type_label := "Linked Loci"]
 dat.long[GIF_type=="GIF_unlinked", GIF_type_label := "Unlinked Loci"]
 
 
-        
-quantiles_95 <- function(x) {
-  r <- quantile(x, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
-  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
-  r
-}
+      
 
 g1 <- ggplot(dat.long[n_founders != 32], aes(x=label, fill=GIF_type_label, y=GIF)) + 
 theme_few(10) +
