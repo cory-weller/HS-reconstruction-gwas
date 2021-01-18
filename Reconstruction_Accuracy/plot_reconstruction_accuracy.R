@@ -71,7 +71,7 @@ plot_subset.beeswarm <- function() {
 
 g <- plot_subset.beeswarm()
 
-ggsave(g, file="Figure_04_reconstruction_accuracy.png", width=16, height=12, units="cm")
+ggsave(g, file="reconstruction_accuracy.png", width=15, height=12, units="cm")
 
 
 

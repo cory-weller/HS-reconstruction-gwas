@@ -40,9 +40,9 @@ population_sizes <- c(100, 500, 1000, 2000, 3000, 4000, 5000)
 # o <- foreach(filename = Sys.glob("./*/accuracy.RDS"), .combine="rbind") %do% {
 #   readRDS(filename)
 # }
-# fwrite(o, file="STITCH_accuracies_summary.txt", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
+# fwrite(o, file="STITCH_accuracies_summary.tab", quote=FALSE, row.names=FALSE, col.names=TRUE, sep="\t")
 
-o <- fread("STITCH_accuracies_summary.txt")
+o <- fread("STITCH_accuracies_summary.tab")
 o[, N := as.numeric(as.character(N))]
 
 # subset for plotting; exclude N=200-400 and 600-900
@@ -56,10 +56,13 @@ o.labels[,val := paste(round(100*medianAcc,1), "%", sep="")]
 
 
 g <- ggplot(o, mapping=aes(x=N_label, y=percent_correct)) +
-  labs(x="Individuals Sequenced at 0.05X", y="Genotype Accuracy (Fraction sites correct)") +
-  theme_few(10) +
+  labs(x="Individuals Sequenced at 0.05X", y="Percent Sites with Correct Genotype Estimate") +
+  theme_few(12) +
   stat_summary(fun.data = quantiles_95, geom="boxplot", width=0.4) +
-  geom_text(data=o.labels, aes(x=N_label, y=medianAcc, label=val), size=2, position=position_nudge(x = -0.49, y = 0))  +
-  scale_x_discrete(drop=FALSE)
+  scale_x_discrete(drop=FALSE) +
+  scale_y_continuous(breaks=c(0.6, 0.7, 0.8, 0.9, 1.0), labels=c("60%", "70%", "80%", "90%", "100%"))
+ # geom_text(data=o.labels, aes(x=N_label, y=medianAcc, label=val), size=3, position=position_nudge(x = -0.49, y = 0)) 
+
+
   
 ggsave(g, file="STITCH_accuracy.svg", width=10,height=10, units="cm")

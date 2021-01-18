@@ -152,6 +152,34 @@ dat[haplotype=="1", ystop := 1]
 dat[haplotype=="2", ystart := 1]
 dat[haplotype=="2", ystop := 2]
 
+
+library(RColorBrewer)
+n <- length(unique(dat$lineID))
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+color_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))[1:n]
+color_map <- data.table(lineID = unique(dat$lineID), rect_color = color_vector)
+setkey(color_map, lineID)
+setkey(dat, lineID)
+dat.merge <- merge(dat, color_map)
+
+dat.merge[, rect_color := factor(rect_color)]
+
+
+paintings <- ggplot(dat.merge, aes(xmin=start, xmax=stop, ymin=ystart, ymax=ystop, fill=rect_color)) +
+geom_rect() + facet_grid(ind~chromosome) +
+scale_fill_manual(values = levels(dat.merge$rect_color)) +
+theme_few(12) +
+theme(legend.position = "none") + theme(axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),legend.position="none",
+          panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank(),  strip.background = element_blank(),
+        strip.text.x = element_blank(), strip.text.y= element_blank())
+
+ggsave(paintings, file="paintings.svg", width=40, height=15, units="cm")
+
+pie(rep(1,n), col=sample(levels(dat.merge$rect_color), 60))
 mytheme <- theme_few() + theme(legend.position = "none") + theme(axis.line=element_blank(),axis.text.x=element_blank(),
           axis.text.y=element_blank(),axis.ticks=element_blank(),
           axis.title.x=element_blank(),
